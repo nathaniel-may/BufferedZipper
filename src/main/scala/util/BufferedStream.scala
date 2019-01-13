@@ -12,9 +12,9 @@ object BufferedStream {
   def next[T]: BS[T] = for {
     bs <- State.get[BufferedStream[T]]
     (pos, buffer, stream) = (bs.pos, bs.buffer, bs.stream)
-    _    <- if (pos+1 < buffer.size) State.put(BufferedStream(pos+1, buffer, stream))
-            else if(stream.isEmpty)  State.put(BufferedStream(pos,   buffer, stream))
-            else                     State.put(BufferedStream(pos+1, buffer, stream.tail))
+    _    <- if (pos+1 < buffer.size) State.put(BufferedStream(pos+1, buffer,                stream))
+            else if(stream.isEmpty)  State.put(BufferedStream(pos,   buffer,                stream))
+            else                     State.put(BufferedStream(pos+1, buffer :+ stream.head, stream.tail))
     next =  if (pos+1 < buffer.size) buffer.lift(pos+1)
             else stream match {
               case Empty   => buffer.lift(pos)

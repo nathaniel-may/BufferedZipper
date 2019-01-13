@@ -10,7 +10,7 @@ import cats.effect.{ExitCode, IO, IOApp}
 // Project
 import util.Shuffle.shuffle
 import util.BufferedStream, BufferedStream.{next, prev}
-import util.CommandLine.{printlnSafe, readLineSafe, readUntil}
+import util.CommandLine.{printlnSafe, readUntil}
 
 object RandPix extends IOApp {
 
