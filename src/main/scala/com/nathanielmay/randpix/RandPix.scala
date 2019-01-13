@@ -15,30 +15,35 @@ import util.CommandLine, CommandLine.{printlnSafe, readLineSafe}
 
 object RandPix extends IOApp {
 
-  def getFiles(f: File): Stream[Path] =
-    if (f.isDirectory) f.listFiles()
-      .toStream
-      .filter(!_.isDirectory)
-      .map(f => Paths.get(f.getAbsolutePath))
-    else throw new Exception("not a valid directory") // TODO
+  def getFiles(f: File): IO[Stream[Path]] =
+    if (f.isDirectory) IO {
+      f.listFiles()
+        .toStream
+        .filter(!_.isDirectory)
+        .map(f => Paths.get(f.getAbsolutePath)) }
+    else IO(Stream.Empty)
 
   override def run(args: List[String]): IO[ExitCode] = {
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
-      _  <- IO(println("[n]ext or [p]revious item?"))
-      np <- CommandLine.readUntil(List("n", "p"), "[n] = next, [p] = previous")
-      _  <- if (np == "n") next.run(buffer)
-      else prev.run(buffer)
+      _                   <- printlnSafe("[n]ext or [p]revious item?")
+      np                  <- CommandLine.readUntil(List("n", "p"), "[n] = next, [p] = previous")
+      tuple               =  if (np == "n") next[T].run(buffer)
+                             else           prev[T].run(buffer)
+      (nextBuffer, value) =  tuple
+      _                   <- printlnSafe(value.getOrElse("Error: nothing to print"))
+      _                   <- printLoop[T](nextBuffer)
     } yield Unit
 
-    def userInterface: IO[Unit] = for {
+    def userInterface: IO[ExitCode] = for {
       _      <- printlnSafe("Path with pictures:")
       path   <- readLineSafe
-      file   =  new File(path)
-      _      <- printlnSafe(s"path contains ${file.listFiles.length} files")
-      stream =  shuffle(getFiles(file)).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
+      file   <- IO(new File(path)) // TODO I honestly have no idea when Java makes the system calls
+      _      <- printlnSafe(s"path contains ${file.listFiles.length} files") // TODO impure
+      files  <- getFiles(file)
+      stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
       _      <- printLoop(BufferedStream(stream))
-    } yield Unit
+    } yield ExitCode.Success
 
-    userInterface.map(_ => ExitCode.Success)
+    userInterface
   }
 }
