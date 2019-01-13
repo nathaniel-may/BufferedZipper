@@ -6,27 +6,30 @@ import java.nio.file.{Path, Paths}
 
 // Scala
 import cats.effect.{ExitCode, IO, IOApp}
-import cats.implicits._
 
 // Project
 import util.Shuffle.shuffle
 import util.BufferedStream, BufferedStream.{next, prev}
-import util.CommandLine, CommandLine.{printlnSafe, readLineSafe}
+import util.CommandLine.{printlnSafe, readLineSafe, readUntil}
 
 object RandPix extends IOApp {
 
-  def getFiles(f: File): IO[Stream[Path]] =
-    if (f.isDirectory) IO {
-      f.listFiles()
+  def getFiles(dir: File): IO[Stream[Path]] =
+    if (dir.exists && dir.isDirectory) IO {
+      dir.listFiles()
         .toStream
         .filter(!_.isDirectory)
         .map(f => Paths.get(f.getAbsolutePath)) }
     else IO(Stream.Empty)
 
   override def run(args: List[String]): IO[ExitCode] = {
+    def isDirPath(s: String): Boolean = {
+      val f = new File(s)
+      f.exists && f.isDirectory }
+
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
       _                   <- printlnSafe("[n]ext or [p]revious item?")
-      np                  <- CommandLine.readUntil(List("n", "p"), "[n] = next, [p] = previous")
+      np                  <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
       tuple               =  if (np == "n") next[T].run(buffer)
                              else           prev[T].run(buffer)
       (nextBuffer, value) =  tuple
@@ -36,9 +39,10 @@ object RandPix extends IOApp {
 
     def userInterface: IO[ExitCode] = for {
       _      <- printlnSafe("Path with pictures:")
-      path   <- readLineSafe
+      path   <- readUntil(isDirPath, "path must be an absolute path to a directory. try again")
       file   <- IO(new File(path)) // TODO I honestly have no idea when Java makes the system calls
-      _      <- printlnSafe(s"path contains ${file.listFiles.length} files") // TODO impure
+      count  <- IO(file.listFiles.length)
+      _      <- printlnSafe(s"path contains $count files") // TODO impure
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
       _      <- printLoop(BufferedStream(stream))
