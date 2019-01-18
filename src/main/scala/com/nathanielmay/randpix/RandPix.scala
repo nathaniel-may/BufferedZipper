@@ -9,7 +9,7 @@ import cats.effect.{ExitCode, IO, IOApp}
 
 // Project
 import util.Shuffle.shuffle
-import util.BufferedStream, BufferedStream.{next, prev}
+import util.BufferedStream
 import util.CommandLine.{printlnSafe, readUntil}
 
 object RandPix extends IOApp {
@@ -30,8 +30,8 @@ object RandPix extends IOApp {
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
       _                   <- printlnSafe("[n]ext or [p]revious item?")
       np                  <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
-      tuple               =  if (np == "n") next[T].run(buffer)
-                             else           prev[T].run(buffer)
+      tuple               =  if (np == "n") buffer.next
+                             else           buffer.prev
       (nextBuffer, value) =  tuple
       _                   <- printlnSafe(value.getOrElse("Error: nothing to print"))
       _                   <- printLoop[T](nextBuffer)
