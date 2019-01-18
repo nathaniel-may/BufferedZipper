@@ -27,14 +27,16 @@ object RandPix extends IOApp {
       val f = new File(s)
       f.exists && f.isDirectory }
 
+    def printFocus[T](buffer: BufferedStream[T], otherwise: String): IO[Unit] =
+      printlnSafe(buffer.focus.getOrElse(otherwise))
+
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
-      _                   <- printlnSafe("[n]ext or [p]revious item?")
-      np                  <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
-      tuple               =  if (np == "n") buffer.next
-                             else           buffer.prev
-      (nextBuffer, value) =  tuple
-      _                   <- printlnSafe(value.getOrElse("Error: nothing to print"))
-      _                   <- printLoop[T](nextBuffer)
+      _          <- printFocus(buffer, "Error: nothing to print")
+      _          <- printlnSafe("[n]ext or [p]revious item?")
+      np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
+      nextBuffer =  if (np == "n") buffer.next
+                    else           buffer.prev
+      _          <- printLoop[T](nextBuffer)
     } yield Unit
 
     def userInterface: IO[ExitCode] = for {
@@ -42,9 +44,10 @@ object RandPix extends IOApp {
       path   <- readUntil(isDirPath, "path must be an absolute path to a directory. try again")
       file   <- IO(new File(path)) // TODO I honestly have no idea when Java makes the system calls
       count  <- IO(file.listFiles.length)
-      _      <- printlnSafe(s"path contains $count files") // TODO impure
+      _      <- printlnSafe(s"path contains $count files")
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
+      _      <- printlnSafe("fuck")
       _      <- printLoop(BufferedStream(stream))
     } yield ExitCode.Success
 
