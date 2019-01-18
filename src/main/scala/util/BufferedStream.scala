@@ -3,6 +3,8 @@ package util
 import scalaz.State
 import Stream.Empty
 
+case class BufferedStream[T] private (pos: Int, buffer: Vector[T], stream: Stream[T])
+
 object BufferedStream {
   type BS[T] = State[BufferedStream[T], Option[T]]
 
@@ -31,25 +33,3 @@ object BufferedStream {
             else               None
   } yield prev
 }
-
-case class BufferedStream[T] private (pos: Int, buffer: Vector[T], stream: Stream[T])
-
-
-//object BufferedStream {
-//  def apply[A](stream: Stream[A]): BufferedStream[A] = BufferedStream[A](0, Vector(), stream)
-//}
-//
-//case class BufferedStream[A] private (pos: Int, buffer: Vector[A], stream: Stream[A]) {
-//
-//  lazy val next: (BufferedStream[A], Option[A]) =
-//    if (pos+1 < buffer.size) (pos+1, buffer, stream, buffer.get(pos+1))
-//    else stream match {
-//      case Stream.Empty => (BufferedStream(pos,   buffer,      stream), buffer.get(pos))
-//      case p #:: ps     => (BufferedStream(pos+1, buffer :+ p, ps),     Some(p))
-//    }
-//
-//  lazy val prev: (BufferedStream[A], Option[A]) =
-//    if (pos > 0) (BufferedStream(pos-1, buffer, stream), buffer.get(pos-1))
-//    else         (BufferedStream(pos,   buffer, stream), buffer.headOption)
-//
-//}
