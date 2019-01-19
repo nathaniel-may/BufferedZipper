@@ -32,6 +32,7 @@ object RandPix extends IOApp {
 
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
       _          <- printFocus(buffer, "Error: nothing to print")
+      _          <- printlnSafe(s"BUFFER: ${buffer.buff}")
       _          <- printlnSafe("[n]ext or [p]revious item?")
       np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
       nextBuffer =  if (np == "n") buffer.next
@@ -47,7 +48,7 @@ object RandPix extends IOApp {
       _      <- printlnSafe(s"path contains $count files")
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
-      _      <- printlnSafe("fuck")
+      _      <- printlnSafe("first random pic: ")
       _      <- printLoop(BufferedStream(stream))
     } yield ExitCode.Success
 
