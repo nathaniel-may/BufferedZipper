@@ -18,7 +18,7 @@ case class BufferedStream[T] private (buffer: Vector[Option[T]], zipper: Option[
         new BufferedStream[T](buffer, Some(zNext), maxBuffer)) }
       .map { nextBs => maxBuffer
         .map { max => if(meter.measureDeep(nextBs.buffer) > max) BufferedStream(BufferedStream.shrinkBufferLeft(nextBs.buffer, max), nextBs.zipper, maxBuffer)
-                      else this }
+                      else nextBs }
         .getOrElse(nextBs) }
     .getOrElse(this)
 
@@ -30,7 +30,7 @@ case class BufferedStream[T] private (buffer: Vector[Option[T]], zipper: Option[
         new BufferedStream[T](buffer, Some(z), maxBuffer)) }
     .map { nextBs => maxBuffer
       .map { max => if(meter.measureDeep(nextBs.buffer) > max) BufferedStream(BufferedStream.shrinkBufferRight(nextBs.buffer, max), nextBs.zipper, maxBuffer)
-                    else this }
+                    else nextBs }
       .getOrElse(nextBs) }
     .getOrElse(this)
 }
@@ -46,11 +46,11 @@ object BufferedStream {
 
   private[util] def shrinkBufferLeft[T](buffer: Vector[Option[T]], max: Long): Vector[Option[T]] =
     if (meter.measureDeep(buffer) <= max) buffer
-    else setFirstToNone(buffer, buffer.indices.toList)
+    else shrinkBufferLeft(setFirstToNone(buffer, buffer.indices.toList), max)
 
   private[util] def shrinkBufferRight[T](buffer: Vector[Option[T]], max: Long): Vector[Option[T]] =
     if (meter.measureDeep(buffer) <= max) buffer
-    else setFirstToNone(buffer, buffer.indices.reverse.toList)
+    else shrinkBufferRight(setFirstToNone(buffer, buffer.indices.reverse.toList), max)
 
   private[util] def setFirstToNone[T](buffer: Vector[Option[T]], indices: List[Int]): Vector[Option[T]] = indices match {
     case i :: _ if buffer(i).isDefined => buffer.updated(i, None)
