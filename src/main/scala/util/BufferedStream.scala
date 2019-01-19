@@ -7,7 +7,6 @@ import org.github.jamm.MemoryMeter
 
 case class BufferedStream[T] private (buffer: Vector[Option[T]], zipper: Option[Zipper[() => T]], maxBuffer: Option[Long]){
   val focus: Option[T] = zipper.flatMap(z => buffer.lift(z.index).flatten)
-  val buff = buffer // TODO dev
   private[util] val meter = new MemoryMeter
 
   def next: BufferedStream[T] = zipper
@@ -57,6 +56,5 @@ object BufferedStream {
     case _ :: is                       => setFirstToNone(buffer, is)
     case _                             => buffer // they're all None already
   }
-
 
 }
