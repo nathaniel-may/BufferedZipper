@@ -13,6 +13,8 @@ import util.BufferedStream
 import util.CommandLine.{printlnSafe, readUntil}
 
 object RandPix extends IOApp {
+  import org.github.jamm.MemoryMeter //TODO dev. remove
+  private val meter = new MemoryMeter
 
   def getFiles(dir: File): IO[Stream[Path]] =
     if (dir.exists && dir.isDirectory) IO {
@@ -32,7 +34,7 @@ object RandPix extends IOApp {
 
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
       _          <- printFocus(buffer, "Error: nothing to print")
-      _          <- printlnSafe(s"BUFFER: ${buffer.buff}")
+      _          <- printlnSafe(s"BUFFER: ${buffer.buff}\n SIZE: ${meter.measureDeep(buffer.buff)}")
       _          <- printlnSafe("[n]ext or [p]revious item?")
       np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
       nextBuffer =  if (np == "n") buffer.next
@@ -49,7 +51,7 @@ object RandPix extends IOApp {
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime())) //TODO do I want that here?
       _      <- printlnSafe("first random pic: ")
-      _      <- printLoop(BufferedStream(stream))
+      _      <- printLoop(BufferedStream(stream, Some(1000L)))
     } yield ExitCode.Success
 
     userInterface
