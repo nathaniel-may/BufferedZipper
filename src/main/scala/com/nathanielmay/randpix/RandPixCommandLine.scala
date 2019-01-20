@@ -12,7 +12,7 @@ import util.Shuffle.shuffle
 import util.BufferedStream
 import util.CommandLine.{printlnSafe, readUntil}
 
-object RandPix extends IOApp {
+object RandPixCommandLine extends IOApp {
 
   def getFiles(dir: File): IO[Stream[Path]] =
     if (dir.exists && dir.isDirectory) IO {
@@ -31,6 +31,7 @@ object RandPix extends IOApp {
       printlnSafe(buffer.focus.getOrElse(otherwise))
 
     def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
+      _          <- printlnSafe(s"Buffer: ${buffer.buff}")
       _          <- printFocus(buffer, "Error: nothing to print")
       _          <- printlnSafe("[n]ext or [p]revious item?")
       np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
@@ -43,7 +44,7 @@ object RandPix extends IOApp {
       _      <- printlnSafe("Path with pictures:")
       path   <- readUntil(isDirPath, "path must be an absolute path to a directory. try again")
       file   <- IO(new File(path)) // TODO I honestly have no idea when Java makes the system calls
-      count  <- IO(file.listFiles.length)
+      count  <- IO(file.listFiles.length) // TODO don't do this twice
       _      <- printlnSafe(s"path contains $count files")
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime()))
