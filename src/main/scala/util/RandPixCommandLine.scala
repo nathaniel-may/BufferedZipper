@@ -1,4 +1,4 @@
-package com.nathanielmay.randpix
+package util
 
 // Java
 import java.io.File
@@ -9,7 +9,7 @@ import cats.effect.{ExitCode, IO, IOApp}
 
 // Project
 import util.Shuffle.shuffle
-import util.BufferedStream
+import util.BufferedZipper
 import util.CommandLine.{printlnSafe, readUntil}
 
 object RandPixCommandLine extends IOApp {
@@ -27,17 +27,17 @@ object RandPixCommandLine extends IOApp {
       val f = new File(s)
       f.exists && f.isDirectory }
 
-    def printFocus[T](buffer: BufferedStream[T], otherwise: String): IO[Unit] =
+    def printFocus[T](buffer: BufferedZipper[T], otherwise: String): IO[Unit] =
       printlnSafe(buffer.focus.getOrElse(otherwise))
 
-    def printLoop[T](buffer: BufferedStream[T]): IO[Unit] = for {
+    def printLoop[T](buffer: BufferedZipper[T]): IO[Unit] = for {
       _          <- printlnSafe(s"Buffer: ${buffer.buff}")
       _          <- printFocus(buffer, "Error: nothing to print")
       _          <- printlnSafe("[n]ext or [p]revious item?")
       np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
       nextBuffer =  if (np == "n") buffer.next
                     else           buffer.prev
-      _          <- printLoop[T](nextBuffer)
+      _          <- printLoop[T](nextBuffer.get) //TODO fix
     } yield Unit
 
     def userInterface: IO[ExitCode] = for {
@@ -49,7 +49,7 @@ object RandPixCommandLine extends IOApp {
       files  <- getFiles(file)
       stream =  shuffle(files).eval(new scala.util.Random(System.nanoTime()))
       _      <- printlnSafe("first random pic: ")
-      _      <- printLoop(BufferedStream(stream, Some(1000L)))
+      _      <- printLoop(BufferedZipper(stream, Some(1000L)))
     } yield ExitCode.Success
 
     userInterface
