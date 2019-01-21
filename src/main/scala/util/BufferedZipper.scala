@@ -5,15 +5,20 @@ import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import org.github.jamm.MemoryMeter
 
 // TODO BufferedStream[M[_], T] ?? Pure represented by scalaz.Scalaz.Id
-case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() => T], focus: T){
+case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() => T]){
   val index: Int = zipper.index
+  val focus: T   = buffer.lift(index).get // TODO get
   val buff = buffer //TODO remove
 
 //  private[util] def focusAt(i: Int): Option[T] = buffer.lift(i).flatten
 
-  def next: Option[BufferedZipper[T]] = ???
+  def next: Option[BufferedZipper[T]] =
+    zipper.next.map {nextZip =>
+      new BufferedZipper(buffer.append(nextZip.focus()), nextZip)}
 
-  def prev: Option[BufferedZipper[T]] = ???
+  def prev: Option[BufferedZipper[T]] =
+    zipper.next.map {nextZip =>
+      new BufferedZipper(buffer.leftFill(nextZip.focus()), nextZip)}
 
 //  def next: Option[BufferedZipper[T]] = zipper
 //    .flatMap(_.next)
@@ -47,12 +52,12 @@ object BufferedZipper {
       .map(() => _)
       .toZipper
       .map(zip => (zip, VectorBuffer(Vector(zip.focus()))))
-      .map { case (zip, buff) => new BufferedZipper(buff, zip, buff.lift(0).get, 0) }
+      .map { case (zip, buff) => new BufferedZipper(buff, zip) }
   }
 
+  private[util] def measureBuffer[T](bs: BufferedZipper[T]): Long = meter.measureDeep(bs.buffer)
+
 //  private[util] def rawBuffer[T](bs: BufferedZipper[T]): Vector[Option[T]] = bs.buffer
-//
-//  private[util] def measureBuffer[T](bs: BufferedZipper[T]): Long = meter.measureDeep(bs.buffer)
 //
 //  private[util] def measureAndShrink[T](nextBs: BufferedZipper[T], lr: LR, bufferStats: Option[BufferStats]): BufferedZipper[T] =
 //    bufferStats.fold(nextBs) { stats =>
@@ -111,15 +116,16 @@ object VectorBuffer {
   object R extends LR
 
   //TODO does it measure in bytes?
-  def apply[T](v: Vector[T], limitBytes: Option[Long] = None) =
+  // Thunking to avoid "double definition" type erasure with private case class constructor
+  def apply[T](v: Vector[T], limitBytes: => Option[Long] = None) =
     new VectorBuffer(v.map(Some(_)), limitBytes.map( max => BufferStats(max, v.map(BufferStats.meter.measureDeep).fold(0L)(_ + _))))
 
   def reverseIndices[T](v: Vector[T]): Range = v.size-1 to 0 by -1
 
   private[util] def shrinkToMax[T](vb: VectorBuffer[T], lr: LR): VectorBuffer[T] =
     vb.stats.map(_ => lr match {
-      case _ if vb.stats.map(_.withinMax) => vb
-      case _ if vb.v.forall(_.isEmpty)    => vb
+      case _ if vb.stats.forall(_.withinMax) => vb
+      case _ if vb.v.forall(_.isEmpty)       => vb
       case L => shrinkToMax(vb.shrinkLeft)(lr)
       case R => shrinkToMax(vb.shrinkRight)(R)
     }).getOrElse(vb)
