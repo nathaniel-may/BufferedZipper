@@ -16,7 +16,7 @@ object BufferedZipperProperties extends Properties("shuffle") {
 
   def traverseToList[T](in: Option[BufferedZipper[T]]): List[T] = {
     def go(z: Option[BufferedZipper[T]], l: List[T]): List[T] =
-      go(z.flatMap(_.next), z.map(_.focus).fold(l)(_ :: l))
+      z.fold(l)(bz => go(bz.next, z.map(_.focus).fold(l)(_ :: l)))
 
     go(in, List()).reverse
   }
