@@ -7,10 +7,7 @@ import org.github.jamm.MemoryMeter
 // TODO BufferedStream[M[_], T] ?? Pure represented by scalaz.Scalaz.Id
 case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() => T]){
   val index: Int = zipper.index
-  val focus: T   = buffer.lift(index).get // TODO get
-  val buff = buffer //TODO remove
-
-//  private[util] def focusAt(i: Int): Option[T] = buffer.lift(i).flatten
+  val focus: T   = buffer.lift(index).getOrElse(zipper.focus()) // gets focus from zipper if the buffer size is zero
 
   def next: Option[BufferedZipper[T]] =
     zipper.next.map {nextZip =>
@@ -20,59 +17,20 @@ case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() 
     zipper.next.map {nextZip =>
       new BufferedZipper(buffer.leftFill(nextZip.focus()), nextZip)}
 
-//  def next: Option[BufferedZipper[T]] = zipper
-//    .flatMap(_.next)
-//    .map { zNext => new BufferedZipper[T](
-//      buffer.lift(zNext.index) match {
-//        case Some(Some(_)) => buffer
-//        case Some(None)    => buffer.updated(zNext.index, Some(zNext.focus()))
-//        case None          => buffer :+ Some(zNext.focus())
-//      },
-//      Some(zNext),
-//      Some(zNext.focus()), //TODO refactor so not option
-//      bufferStats.map(_.updated(zNext.focus())) )}
-//    .map { nextBs => measureAndShrink(nextBs, L, bufferStats) }
-//
-//  def prev: Option[BufferedZipper[T]] = zipper
-//    .flatMap(z => z.previous)
-//    .map { zPrev => new BufferedZipper(
-//      focusAt(zPrev.index)
-//        .fold(buffer.updated(zPrev.index, Some(zPrev.focus())))(_ => buffer),
-//      Some(zPrev),
-//      maxBuffer,
-//      this.estimatedBufferSize) }
-//    .map { nextBs => measureAndShrink(nextBs, R, maxBuffer) }
 }
 
 object BufferedZipper {
   private[util] val meter = new MemoryMeter
 
   def apply[T](stream: Stream[T], maxBuffer: Option[Long] = None): Option[BufferedZipper[T]] = {
-    stream
-      .map(() => _)
-      .toZipper
-      .map(zip => (zip, VectorBuffer(Vector(zip.focus()))))
+    stream.map(() => _).toZipper
+      .map { zip => (zip, VectorBuffer(maxBuffer).append(zip.focus())) }
       .map { case (zip, buff) => new BufferedZipper(buff, zip) }
   }
 
-  private[util] def measureBuffer[T](bs: BufferedZipper[T]): Long = meter.measureDeep(bs.buffer)
-
-//  private[util] def rawBuffer[T](bs: BufferedZipper[T]): Vector[Option[T]] = bs.buffer
-//
-//  private[util] def measureAndShrink[T](nextBs: BufferedZipper[T], lr: LR, bufferStats: Option[BufferStats]): BufferedZipper[T] =
-//    bufferStats.fold(nextBs) { stats =>
-//      if (meter.measureDeep(nextBs.buffer) > stats.maxBufferSize)
-//        BufferedZipper(BufferedZipper.shrinkBuffer(nextBs.buffer, lr, stats), nextBs.zipper, bufferStats)
-//      else nextBs }
-//
-//  //TODO measure each item and increment size counter. make sure the decrement when evicting from buffer too.
-//  private[util] def shrinkBuffer[T](buffer: Vector[Option[T]], lr: LR, stats: BufferStats): Vector[Option[T]] =
-//    if (meter.measureDeep(buffer) <= max) buffer
-//    else lr match {
-//      case L => shrinkBuffer(setFirstToNone(buffer, buffer.indices.toList),         L, max)
-//      case R => shrinkBuffer(setFirstToNone(buffer, buffer.indices.reverse.toList), R, max)
-//    }
-
+  //TODO private[util] dev prints
+  def measureBufferContents[T](bs: BufferedZipper[T]): Long =
+    bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 }
 
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {
@@ -81,6 +39,7 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
   // TODO is this the right approach?
   def lift(i: Int): Option[T] = v.lift(i).flatten
 
+  // TODO change to rightFill which will append if the right-most elem is Some(_)
   def append(elem: T): VectorBuffer[T] =
     shrinkToMax(VectorBuffer(
       v :+ Some(elem),
@@ -98,7 +57,7 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
 
   private[util] def shrinkRight: VectorBuffer[T] = {
     val (newV, removedT) = setFirstToNone(v, reverseIndices(v).toList)
-    VectorBuffer(newV, stats.map(_.decreaseBySizeOf(removedT)))
+    VectorBuffer(newV, stats.map(s => removedT.fold(s)(s.decreaseBySizeOf)))
   }
 
   private[util] def setFirstToNone(buffer: Vector[Option[T]], indices: List[Int]): (Vector[Option[T]], Option[T]) = indices match {
@@ -109,6 +68,13 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
 
 }
 
+// TODO REMOVE
+object M {
+  def main(args: Array[String]): Unit = {
+    BufferedZipper(Stream(0, 0), Some(0L))
+  }
+}
+
 object VectorBuffer {
 
   trait LR
@@ -116,9 +82,10 @@ object VectorBuffer {
   object R extends LR
 
   //TODO does it measure in bytes?
-  // Thunking to avoid "double definition" type erasure with private case class constructor
-  def apply[T](v: Vector[T], limitBytes: => Option[Long] = None) =
-    new VectorBuffer(v.map(Some(_)), limitBytes.map( max => BufferStats(max, v.map(BufferStats.meter.measureDeep).fold(0L)(_ + _))))
+  def apply[T](limitBytes: Option[Long]): VectorBuffer[T] =
+    new VectorBuffer(
+      Vector(),
+      limitBytes.map(l => if (l < 0) 0 else l).map(BufferStats(_, 0L)) )
 
   def reverseIndices[T](v: Vector[T]): Range = v.size-1 to 0 by -1
 
@@ -152,7 +119,6 @@ object VectorBuffer {
 private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: Long) {
   import BufferStats.meter
   val withinMax: Boolean = estimatedBufferSize <= maxBufferSize
-  val exceedsMaxBy: Option[Long] = if (withinMax) None else Some(estimatedBufferSize - maxBufferSize) //TODO delete?
   def increaseBySizeOf[T](elem: T) = new BufferStats(maxBufferSize, estimatedBufferSize + meter.measureDeep(elem))
   def decreaseBySizeOf[T](elem: T) = new BufferStats(maxBufferSize, estimatedBufferSize - meter.measureDeep(elem))
 }

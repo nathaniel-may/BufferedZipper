@@ -27,13 +27,12 @@ object RandPixCommandLine extends IOApp {
       f.exists && f.isDirectory }
 
     def printLoop[T](buffer: BufferedZipper[T]): IO[Unit] = for {
-      _          <- printlnSafe(s"Buffer: ${buffer.buff}")
       _          <- printlnSafe(buffer)
       _          <- printlnSafe("[n]ext or [p]revious item?")
       np         <- readUntil(Set("n", "p"), "[n] = next, [p] = previous")
       nextBuffer =  if (np == "n") buffer.next
                     else           buffer.prev
-      _          <- printLoop[T](nextBuffer.get) //TODO fix
+      _          <- printLoop[T](nextBuffer.get) //TODO get
     } yield Unit
 
     def userInterface: IO[ExitCode] = for {

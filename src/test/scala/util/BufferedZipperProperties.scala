@@ -23,10 +23,9 @@ object BufferedZipperProperties extends Properties("shuffle") {
 
   def unzipToListWithBufferSize[T](in: Option[BufferedZipper[T]]): List[(T, Long)] = {
     def go(z: Option[BufferedZipper[T]], l: List[(T, Long)]): List[(T, Long)] =
-      go(
-        z.flatMap(_.next),
-        z.map(_.focus)
-          .fold(l)(zip => (zip, BufferedZipper.measureBuffer(z.get)) :: l)) //TODO get
+      z.fold(l)(bz => go(
+        bz.next,
+        (bz.focus, BufferedZipper.measureBufferContents(bz)) :: l))
 
     go(in, List()).reverse
   }
@@ -51,7 +50,9 @@ object BufferedZipperProperties extends Properties("shuffle") {
   property("buffer limit is never exceeded") = forAll {
     (inStream: Stream[Int], max: Long) =>
       unzipToListWithBufferSize(BufferedZipper(inStream, Some(max)))
-        .forall(_._2 <= max)
+        // TODO println. Also this still fails.
+        .map{ case (i, size) => println(s"i: $i, size: $size, max: $max"); (i, size) } //TODO remove
+        .forall {case (_, size) => size <= max || (max < 0 && size == 0) }
   }
 
 }
