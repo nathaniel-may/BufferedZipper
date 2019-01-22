@@ -1,6 +1,7 @@
 package util
 
-import scalaz.{Monad, Zipper}
+import scalaz.{Id, Monad, Zipper}
+import scalaz.Scalaz.Id
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import org.github.jamm.MemoryMeter
 
@@ -33,7 +34,7 @@ object BufferedZipper {
 
   private[util] val meter = new MemoryMeter // TODO this could live lower
 
-  def apply[M[_]: Monad, T](stream: Stream[M[T]], maxBuffer: Option[Long] = None): Option[M[BufferedZipper[M, T]]] = {
+  def apply[M[_]: Monad, T](stream: Stream[M[T]], maxBuffer: Option[Long]): Option[M[BufferedZipper[M, T]]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
@@ -41,6 +42,11 @@ object BufferedZipper {
       .map { zip => zip.focus
         .map { t => new BufferedZipper(VectorBuffer(maxBuffer).append(t), zip, t) } }
   }
+
+  def apply[T](stream: Stream[T], maxBuffer: Option[Long]): Option[BufferedZipper[Id, T]] =
+    stream.toZipper
+      .map { zip => val t = zip.focus
+                    new BufferedZipper[Id, T](VectorBuffer(maxBuffer).append(t), implicitly[Monad[Id]].point(zip), t) }
 
   private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
