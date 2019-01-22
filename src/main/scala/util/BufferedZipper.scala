@@ -10,12 +10,14 @@ case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() 
   val focus: T   = buffer.lift(index).getOrElse(zipper.focus()) // gets focus from zipper if the buffer size is zero
 
   def next: Option[BufferedZipper[T]] =
-    zipper.next.map {nextZip =>
-      new BufferedZipper(buffer.append(nextZip.focus()), nextZip)}
+    zipper.next.map { nextZip => new BufferedZipper(
+      buffer.insertRight(nextZip.focus()).getOrElse(buffer.append(nextZip.focus())),  // TODO focus called twice (make higher kinded or use a val)
+      nextZip) }
 
   def prev: Option[BufferedZipper[T]] =
-    zipper.next.map {nextZip =>
-      new BufferedZipper(buffer.leftFill(nextZip.focus()), nextZip)}
+    zipper.previous.flatMap { prevZip => buffer
+      .insertLeft(prevZip.focus())
+      .map(filledBuffer => new BufferedZipper(filledBuffer, prevZip)) }
 
 }
 
@@ -28,13 +30,12 @@ object BufferedZipper {
       .map { case (zip, buff) => new BufferedZipper(buff, zip) }
   }
 
-  //TODO private[util] dev prints
-  def measureBufferContents[T](bs: BufferedZipper[T]): Long =
+  private[util] def measureBufferContents[T](bs: BufferedZipper[T]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 }
 
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {
-  import VectorBuffer.{L, R, shrinkToMax, reverseIndices}
+  import VectorBuffer.{LR, L, R, shrinkToMax, reverseIndices}
 
   // TODO is this the right approach?
   def lift(i: Int): Option[T] = v.lift(i).flatten
@@ -45,18 +46,23 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
       v :+ Some(elem),
       stats.map(_.increaseBySizeOf(elem))))(L)
 
-  def leftFill(elem: T): VectorBuffer[T] =
-    shrinkToMax(VectorBuffer(
-      VectorBuffer.leftFill(v, elem),
-      stats.map(_.increaseBySizeOf(elem))))(R)
+  // returns None instead of appending //TODO inserted v insert?
+  def insertRight(elem: T): Option[VectorBuffer[T]] =
+    insert(VectorBuffer.insertRight(v, elem), L, elem)
 
-  private[util] def shrinkLeft: VectorBuffer[T] = {
-    val (newV, removedT) = setFirstToNone(v, v.indices.toList)
-    VectorBuffer(newV, stats.map(_.decreaseBySizeOf(removedT)))
-  }
+  // returns None instead of prepending
+  def insertLeft(elem: T): Option[VectorBuffer[T]] =
+    insert(VectorBuffer.insertLeft(v, elem), R, elem)
 
-  private[util] def shrinkRight: VectorBuffer[T] = {
-    val (newV, removedT) = setFirstToNone(v, reverseIndices(v).toList)
+  def insert(filledBuffer: Option[Vector[Option[T]]], reduceFrom: LR, elem: T): Option[VectorBuffer[T]] =
+    filledBuffer.map { fb => shrinkToMax(
+      new VectorBuffer(fb, stats.map(_.increaseBySizeOf(elem))))(reduceFrom) }
+
+  private[util] def shrinkLeft:  VectorBuffer[T] = shrink(v.indices)
+  private[util] def shrinkRight: VectorBuffer[T] = shrink(reverseIndices(v))
+
+  private[util] def shrink(indices: Range): VectorBuffer[T] = {
+    val (newV, removedT) = setFirstToNone(v, indices.toList)
     VectorBuffer(newV, stats.map(s => removedT.fold(s)(s.decreaseBySizeOf)))
   }
 
@@ -103,18 +109,19 @@ object VectorBuffer {
       .map { stats => if (stats.withinMax) newVB else shrinkToMax(newVB, lr) }
       .getOrElse(newVB)
 
-  private[util] def leftFill[T](v: Vector[Option[T]], elem: T): Vector[Option[T]] = {
-    def go(indices: List[Int]): Vector[Option[T]] = indices match {
-      case i :: _ if v.lift(i).exists(_.isEmpty) => v.updated(i, Some(elem))
-      case _ :: is => go(is)
-      case Nil => v // TODO Should never get here. Nowhere on the left to fill.
-    }
+  private[util] def insertLeft[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
+    insertFrom(v, elem, reverseIndices(v).toList)
 
-    go(reverseIndices(v).toList)
+  private[util] def insertRight[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
+    insertFrom(v, elem, v.indices.toList)
+
+  private[util] def insertFrom[T](v: Vector[Option[T]], elem: T, indices: List[Int]): Option[Vector[Option[T]]] = indices match {
+    case i :: _ if v.lift(i).exists(_.isEmpty) => Some(v.updated(i, Some(elem)))
+    case _ :: is                               => insertFrom(v, elem, is)
+    case Nil                                   => None
   }
 
 }
-
 
 private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: Long) {
   import BufferStats.meter

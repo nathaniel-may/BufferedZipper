@@ -50,8 +50,6 @@ object BufferedZipperProperties extends Properties("shuffle") {
   property("buffer limit is never exceeded") = forAll {
     (inStream: Stream[Int], max: Long) =>
       unzipToListWithBufferSize(BufferedZipper(inStream, Some(max)))
-        // TODO println. Also this still fails.
-        .map{ case (i, size) => println(s"i: $i, size: $size, max: $max"); (i, size) } //TODO remove
         .forall {case (_, size) => size <= max || (max < 0 && size == 0) }
   }
 
