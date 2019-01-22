@@ -1,10 +1,12 @@
 package util
 
-//scalacheck
+// Scalacheck
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen, Properties}
-import scalaz.Scalaz.Id
+
+// Scala
 import Stream.Empty
+import scalaz.Scalaz.Id
 
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
@@ -84,6 +86,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     (inStream: Stream[Int], max: PositiveLong) =>
       unzipToListWithBufferSize(BufferedZipper(inStream, Some(max.wrapped)))
         .forall(_._2 <= max.wrapped)
+  }
+
+  property("buffer is being used when traversed once linearlly") = forAll {
+    (inStream: Stream[Int], max: PositiveLong) =>
+      unzipToListWithBufferSize(BufferedZipper(inStream, Some(max.wrapped + 16)))
+        .forall(_._2 > 0)
   }
 
   // TODO make a better path. Maybe def makes it half way in? how to make a Gen[Path]

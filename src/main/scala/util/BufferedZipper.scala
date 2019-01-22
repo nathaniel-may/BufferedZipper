@@ -24,7 +24,7 @@ case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() 
 }
 
 object BufferedZipper {
-  private[util] val meter = new MemoryMeter
+  private[util] val meter = new MemoryMeter // TODO this could live lower
 
   def apply[T](stream: Stream[T], maxBuffer: Option[Long] = None): Option[BufferedZipper[T]] = {
     stream.map(() => _).toZipper
@@ -39,7 +39,6 @@ object BufferedZipper {
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {
   import VectorBuffer.{LR, L, R, shrinkToMax, reverseIndices}
 
-  // TODO is this the right approach?
   def lift(i: Int): Option[T] = v.lift(i).flatten
 
   // TODO change to rightFill which will append if the right-most elem is Some(_)
@@ -74,13 +73,6 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
     case _                             => (buffer, None) // they're all None already
   }
 
-}
-
-// TODO REMOVE
-object M {
-  def main(args: Array[String]): Unit = {
-    BufferedZipper(Stream(0, 0), Some(0L))
-  }
 }
 
 object VectorBuffer {
@@ -128,12 +120,10 @@ object VectorBuffer {
 private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: Long) {
   import BufferStats.meter
   val withinMax: Boolean = estimatedBufferSize <= maxBufferSize
-  def increaseBySizeOf[T](elem: T) = new BufferStats(maxBufferSize, estimatedBufferSize + meter.measureDeep(elem))
-  def decreaseBySizeOf[T](elem: T) = new BufferStats(maxBufferSize, estimatedBufferSize - meter.measureDeep(elem))
+  def increaseBySizeOf[T](elem: T) = BufferStats(maxBufferSize, estimatedBufferSize + meter.measureDeep(elem))
+  def decreaseBySizeOf[T](elem: T) = BufferStats(maxBufferSize, estimatedBufferSize - meter.measureDeep(elem))
 }
 
 object BufferStats {
   val meter = new MemoryMeter
-  def apply[T](maxBufferSize: Long, prevEstimatedBufferSize: Long, elem: T): BufferStats =
-    new BufferStats(maxBufferSize, prevEstimatedBufferSize + meter.measureDeep(elem))
 }
