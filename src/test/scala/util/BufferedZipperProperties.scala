@@ -8,7 +8,8 @@ import org.scalacheck.{Arbitrary, Gen, Properties}
 import Stream.Empty
 import scalaz.Monad
 import scalaz.Scalaz.Id
-import scalaz._, std.list._, std.option._, syntax.traverse._ // sequence
+import scalaz._, effect._, IO._ //IO
+//import scalaz._, std.list._, std.option._, syntax.traverse._ // sequence
 
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
@@ -122,6 +123,22 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
       go(BufferedZipper[Id, Int](inStream, Some(max.wrapped)), path, implicitly[Monad[Id]].point(List[Long]()))
         .forall(_ <= max.wrapped)
+    }
+  }
+
+  property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
+    (elem: Short, max: PositiveLong) => {
+      var outsideState:     Long = 0
+      val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })
+      val io = for {
+        mBuff <- BufferedZipper[IO, Long](instructions, Some(max.wrapped))
+        focus =  for { buff <- mBuff } yield buff.focus
+      } yield focus
+      val      sameBeforeCall = outsideState == 0
+      lazy val sameAfterCall  = outsideState == elem
+      io.map { _.unsafePerformIO() }
+
+      sameBeforeCall && sameAfterCall
     }
   }
 
