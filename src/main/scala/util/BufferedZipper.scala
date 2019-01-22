@@ -11,12 +11,14 @@ case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() 
 
   def next: Option[BufferedZipper[T]] =
     zipper.next.map { nextZip => new BufferedZipper(
-      buffer.insertRight(nextZip.focus()).getOrElse(buffer.append(nextZip.focus())),  // TODO focus called twice (make higher kinded or use a val)
+      buffer.lift(nextZip.index)
+        .fold(buffer.insertRight(nextZip.focus()).getOrElse(buffer.append(nextZip.focus())))(_ => buffer), // TODO focus called twice. higher kinds or val
       nextZip) }
 
   def prev: Option[BufferedZipper[T]] =
     zipper.previous.flatMap { prevZip => buffer
-      .insertLeft(prevZip.focus())
+      .lift(prevZip.index)
+      .fold[Option[VectorBuffer[T]]](buffer.insertLeft(prevZip.focus()))(_ => Some(buffer))
       .map(filledBuffer => new BufferedZipper(filledBuffer, prevZip)) }
 
 }
