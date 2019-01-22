@@ -1,38 +1,48 @@
 package util
 
-import scalaz.Zipper
+import scalaz.{Monad, Zipper}
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import org.github.jamm.MemoryMeter
 
-// TODO BufferedStream[M[_], T] ?? Pure represented by scalaz.Scalaz.Id
-case class BufferedZipper[T] private(buffer: VectorBuffer[T], zipper: Zipper[() => T]){
+case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zipper: Zipper[M[T]], focus: T){
+  private val monadSyntax = implicitly[Monad[M]].monadSyntax
+  import monadSyntax._
+
   val index: Int = zipper.index
-  val focus: T   = buffer.lift(index).getOrElse(zipper.focus()) // gets focus from zipper if the buffer size is zero
 
-  def next: Option[BufferedZipper[T]] =
-    zipper.next.map { nextZip => new BufferedZipper(
-      buffer.lift(nextZip.index)
-        .fold(buffer.insertRight(nextZip.focus()).getOrElse(buffer.append(nextZip.focus())))(_ => buffer), // TODO focus called twice. higher kinds or val
-      nextZip) }
+  // TODO don't keep a copy of the focus in the buffer
+  def next: Option[M[BufferedZipper[M, T]]] =
+    zipper.next.map { nextZip => nextZip.focus
+      .map { t => new BufferedZipper(
+        buffer.lift(nextZip.index)
+          .fold(buffer.insertRight(t).getOrElse(buffer.append(t)))(_ => buffer),
+        nextZip,
+        t) } }
 
-  def prev: Option[BufferedZipper[T]] =
-    zipper.previous.flatMap { prevZip => buffer
-      .lift(prevZip.index)
-      .fold[Option[VectorBuffer[T]]](buffer.insertLeft(prevZip.focus()))(_ => Some(buffer))
-      .map(filledBuffer => new BufferedZipper(filledBuffer, prevZip)) }
-
+  // TODO don't keep a copy of the focus in the buffer
+  def prev: Option[M[BufferedZipper[M, T]]] =
+    zipper.previous.map { prevZip => prevZip.focus
+      .map { t => new BufferedZipper(
+        buffer.lift(prevZip.index)
+          .fold(buffer.insertLeft(t).get)(_ => buffer), // TODO get
+        prevZip,
+        t) } }
 }
 
 object BufferedZipper {
+
   private[util] val meter = new MemoryMeter // TODO this could live lower
 
-  def apply[T](stream: Stream[T], maxBuffer: Option[Long] = None): Option[BufferedZipper[T]] = {
-    stream.map(() => _).toZipper
-      .map { zip => (zip, VectorBuffer(maxBuffer).append(zip.focus())) }
-      .map { case (zip, buff) => new BufferedZipper(buff, zip) }
+  def apply[M[_]: Monad, T](stream: Stream[M[T]], maxBuffer: Option[Long] = None): Option[M[BufferedZipper[M, T]]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    stream.toZipper
+      .map { zip => zip.focus
+        .map { t => new BufferedZipper(VectorBuffer(maxBuffer).append(t), zip, t) } }
   }
 
-  private[util] def measureBufferContents[T](bs: BufferedZipper[T]): Long =
+  private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 }
 
