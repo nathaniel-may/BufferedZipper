@@ -3,24 +3,21 @@ package util
 //scalacheck
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen, Properties}
-import Gen.choose
 import scalaz.Scalaz.Id
-
-//Scala
 import Stream.Empty
-
-//project
-
-
 
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   case class StreamAtLeast2[T](wrapped: Stream[T])
+  case class PositiveLong(wrapped: Long)
 
   implicit val aStreamAtLeast2: Arbitrary[StreamAtLeast2[Int]] = Arbitrary((for {
     l1 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
     l2 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
   } yield l1 ::: l2).map(l => StreamAtLeast2(l.toStream)))
+
+  implicit val aPositiveLong: Arbitrary[PositiveLong] =
+    Arbitrary(Gen.choose(0, Long.MaxValue).map(PositiveLong))
 
   def traverseToList[T](in: Option[BufferedZipper[T]]): List[T] = {
     def go(z: Option[BufferedZipper[T]], l: List[T]): List[T] = z match {
@@ -83,11 +80,28 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       traverseFromBackToList(BufferedZipper(inStream, max)) == inStream.toList
   }
 
-  // TODO arbitrary "path" to zip back and forth through the stream
-  property("buffer limit is never exceeded") = forAll {
-    (inStream: Stream[Int], max: Long) =>
-      unzipToListWithBufferSize(BufferedZipper(inStream, Some(max)))
-        .forall {case (_, size) => size <= max || (max < 0 && size == 0) }
+  property("buffer limit is never exceeded when traversed once linearlly") = forAll {
+    (inStream: Stream[Int], max: PositiveLong) =>
+      unzipToListWithBufferSize(BufferedZipper(inStream, Some(max.wrapped)))
+        .forall(_._2 <= max.wrapped)
+  }
+
+  // TODO make a better path. Maybe def makes it half way in? how to make a Gen[Path]
+  // TODO that has a decent likelihood of touching all elements in the stream?
+  property("buffer limit is never exceeded on a random path") = forAll {
+    (inStream: Stream[Int], path: Stream[Boolean], max: PositiveLong) => {
+      def go[T](zipper: Option[BufferedZipper[T]], path: Stream[Boolean], l: List[Long]): List[Long] = (zipper, path) match {
+        case (Some(z), next #:: p) =>
+          if(next) go(z.next, p, BufferedZipper.measureBufferContents(z) :: l)
+          else     go(z.prev, p, BufferedZipper.measureBufferContents(z) :: l)
+        case (_,       Empty)      => l
+        case (None,    _)          => l
+      }
+
+
+      go(BufferedZipper(inStream, Some(max.wrapped)), path, List())
+        .forall(_ <= max.wrapped)
+    }
   }
 
 }
