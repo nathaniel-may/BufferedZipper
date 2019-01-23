@@ -11,12 +11,14 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
 
   val index: Int = zipper.index
 
-  def next: Option[M[BufferedZipper[M, T]]] = zipper.next.map(shiftTo)
-  def prev: Option[M[BufferedZipper[M, T]]] = zipper.previous.map(shiftTo)
-  
-  private[util] def shiftTo(z: Zipper[M[T]]): M[BufferedZipper[M, T]] =
+  def next: Option[M[BufferedZipper[M, T]]] = zipper.next.map { zNext =>
+    shiftTo(zNext, buffer => if(buffer.size < index) buffer.append(focus) else buffer.updated(index, focus).evict(zNext.index)) }
+  def prev: Option[M[BufferedZipper[M, T]]] = zipper.previous.map { zPrev =>
+    shiftTo(zPrev, buffer => buffer.updated(index, focus).evict(zPrev.index)) }
+
+  private[util] def shiftTo(z: Zipper[M[T]], shift: VectorBuffer[T] => VectorBuffer[T]): M[BufferedZipper[M, T]] =
     buffer.lift(z.index).fold(
-      z.focus.map { t => new BufferedZipper(buffer, z, t)})(
+      z.focus.map { t => new BufferedZipper(shift(buffer), z, t)})(
       t => point(new BufferedZipper(buffer.evict(z.index).updated(index, focus), z, t)) )
 
 }
@@ -29,23 +31,28 @@ object BufferedZipper {
 
     stream.toZipper
       .map { zip => zip.focus
-        .map { t => new BufferedZipper(VectorBuffer(maxBuffer).append(t), zip, t) } }
+        .map { t => new BufferedZipper(VectorBuffer(maxBuffer), zip, t) } }
   }
 
   def apply[T](stream: Stream[T], maxBuffer: Option[Long]): Option[BufferedZipper[Id, T]] =
     stream.toZipper
       .map { zip => val t = zip.focus
-                    new BufferedZipper[Id, T](VectorBuffer(maxBuffer).append(t), implicitly[Monad[Id]].point(zip), t) }
+                    new BufferedZipper[Id, T](VectorBuffer(maxBuffer), implicitly[Monad[Id]].point(zip), t) }
+
+  //TODO DELETE
+  def getBuff[M[_]: Monad, T](bz: BufferedZipper[M, T]) = (bz.focus, bz.buffer.v)
 }
 
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {
   import VectorBuffer.{LR, L, R, shrinkToMax, reverseIndices}
 
+  val size: Int = v.size
+
   def lift(i: Int): Option[T] = v.lift(i).flatten
 
   // does not append or prepend
   def updated(i: Int, t: T): VectorBuffer[T] =
-    v.lift(i).fold(this){ _ => VectorBuffer(v.updated(i, Some(t)), stats.map(_.decreaseBySizeOf(t))) }
+    v.lift(i).fold(this){ _ => shrinkToMax(VectorBuffer(v.updated(i, Some(t)), stats.map(_.decreaseBySizeOf(t))))(L) } // TODO shouldn't ALWAYS shrink from the left
 
   def append(elem: T): VectorBuffer[T] =
     shrinkToMax(VectorBuffer(
@@ -134,4 +141,32 @@ private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: L
 
 object BufferStats {
   val meter = new MemoryMeter
+}
+
+object M{
+  import scalaz.effect.IO
+  import scalaz.std.list._ //sequence on lists
+  import scalaz.syntax.traverse._ //sequence
+
+  def main(args: Array[String]): Unit = {
+    var effectCount: Int = 0
+    val s = Stream(1, 2, 3)
+    val sWithEffect = s.map(i => IO {effectCount += 1; i})
+    val bz0 = BufferedZipper[IO, Int](sWithEffect, None).get.unsafePerformIO()
+    val effectCount0 = effectCount
+    val bz1 = bz0.next.get.unsafePerformIO()
+    val effectCount1 = effectCount
+    val bz2 = bz1.next.get.unsafePerformIO()
+    val effectCount2 = effectCount
+    val bz3 = bz2.prev.get.unsafePerformIO()
+    val effectCount3 = effectCount
+    val bz4 = bz3.prev.get.unsafePerformIO()
+    val effectCount4 = effectCount
+
+    println(s"0: ${BufferedZipper.getBuff(bz0)}, effectCount: $effectCount0")
+    println(s"1: ${BufferedZipper.getBuff(bz1)}, effectCount: $effectCount1")
+    println(s"2: ${BufferedZipper.getBuff(bz2)}, effectCount: $effectCount2")
+    println(s"1: ${BufferedZipper.getBuff(bz3)}, effectCount: $effectCount3")
+    println(s"2: ${BufferedZipper.getBuff(bz4)}, effectCount: $effectCount4")
+  }
 }
