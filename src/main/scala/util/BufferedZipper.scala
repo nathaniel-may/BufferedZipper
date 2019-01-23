@@ -21,15 +21,13 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
         t) } }
 
   // TODO don't keep a copy of the focus in the buffer
-  def prev: Option[M[BufferedZipper[M, T]]] =
-//    zipper.previous.map { prevZip => buffer.lift(prevZip.index)
-//      .fold(buffer.insertLeft(prevZip.focus.map{ t => }).get)(_ => buffer) }
-    zipper.previous.map { prevZip => prevZip.focus
-      .map { t => new BufferedZipper(
-        buffer.lift(prevZip.index)
-          .fold(buffer.insertLeft(t).get)(_ => buffer), // TODO get
-        prevZip,
-        t) } }
+  def prev: Option[Either[M[BufferedZipper[M, T]], BufferedZipper[M, T]]] =
+    zipper.previous.map { prevZip => buffer.lift(prevZip.index)
+      .fold[(Either[M[VectorBuffer[T]], VectorBuffer[T]], Zipper[M[T]])]((Left(prevZip.focus.map{ t => buffer.insertLeft(t).get}), prevZip))(_ => (Right(buffer), prevZip)) }
+      .map { case (eBuff, prevZip) => eBuff.fold(
+        mvb => Left(mvb.map(vb => new BufferedZipper(vb, prevZip, vb(prevZip.index)))),
+        vb  => Right(             new BufferedZipper(vb, prevZip, vb(prevZip.index)))) }
+
 }
 
 object BufferedZipper {
