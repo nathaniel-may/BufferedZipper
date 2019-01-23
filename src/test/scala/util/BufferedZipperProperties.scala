@@ -11,6 +11,7 @@ import scalaz.Scalaz.Id
 import scalaz.effect.IO
 import org.github.jamm.MemoryMeter
 
+//TODO add test for buffer eviction in the correct direction
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val meter = new MemoryMeter
 
@@ -75,7 +76,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     go(in, point(List())).map(_.reverse)
   }
 
-  private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
+  def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {

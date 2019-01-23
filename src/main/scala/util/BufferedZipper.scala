@@ -15,14 +15,14 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
   def next: Option[M[BufferedZipper[M, T]]] =
     zipper.next
     .map { nextZip => buffer.lift(nextZip.index).fold(
-      nextZip.focus.map { t => new BufferedZipper(buffer.insertRight(t).getOrElse(buffer.append(t)), nextZip, t) })(
+      nextZip.focus.map { t => new BufferedZipper(buffer.insertedRight(t).getOrElse(buffer.append(t)), nextZip, t) })(
       t => point(new BufferedZipper(buffer, nextZip, t))) }
 
   // TODO don't keep a copy of the focus in the buffer
   def prev: Option[M[BufferedZipper[M, T]]] =
     zipper.previous
       .map { prevZip => buffer.lift(prevZip.index).fold(
-        prevZip.focus.map { t => new BufferedZipper(buffer.insertLeft(t).get, prevZip, t)})(
+        prevZip.focus.map { t => new BufferedZipper(buffer.insertedLeft(t).get, prevZip, t)})(
         t => point(new BufferedZipper(buffer, prevZip, t)) ) }
 
 }
@@ -49,21 +49,20 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
 
   def lift(i: Int): Option[T] = v.lift(i).flatten
 
-  // TODO change to rightFill which will append if the right-most elem is Some(_)
   def append(elem: T): VectorBuffer[T] =
     shrinkToMax(VectorBuffer(
       v :+ Some(elem),
       stats.map(_.increaseBySizeOf(elem))))(L)
 
-  // returns None instead of appending //TODO inserted v insert?
-  def insertRight(elem: T): Option[VectorBuffer[T]] =
-    insert(VectorBuffer.insertRight(v, elem), L, elem)
+  // returns None instead of appending
+  def insertedRight(elem: T): Option[VectorBuffer[T]] =
+    inserted(VectorBuffer.insertRight(v, elem), L, elem)
 
   // returns None instead of prepending
-  def insertLeft(elem: T): Option[VectorBuffer[T]] =
-    insert(VectorBuffer.insertLeft(v, elem), R, elem)
+  def insertedLeft(elem: T): Option[VectorBuffer[T]] =
+    inserted(VectorBuffer.insertLeft(v, elem), R, elem)
 
-  def insert(filledBuffer: Option[Vector[Option[T]]], reduceFrom: LR, elem: T): Option[VectorBuffer[T]] =
+  def inserted(filledBuffer: Option[Vector[Option[T]]], reduceFrom: LR, elem: T): Option[VectorBuffer[T]] =
     filledBuffer.map { fb => shrinkToMax(
       new VectorBuffer(fb, stats.map(_.increaseBySizeOf(elem))))(reduceFrom) }
 
