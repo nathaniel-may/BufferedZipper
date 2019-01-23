@@ -22,6 +22,8 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
 
   // TODO don't keep a copy of the focus in the buffer
   def prev: Option[M[BufferedZipper[M, T]]] =
+//    zipper.previous.map { prevZip => buffer.lift(prevZip.index)
+//      .fold(buffer.insertLeft(prevZip.focus.map{ t => }).get)(_ => buffer) }
     zipper.previous.map { prevZip => prevZip.focus
       .map { t => new BufferedZipper(
         buffer.lift(prevZip.index)
@@ -47,6 +49,24 @@ object BufferedZipper {
     stream.toZipper
       .map { zip => val t = zip.focus
                     new BufferedZipper[Id, T](VectorBuffer(maxBuffer).append(t), implicitly[Monad[Id]].point(zip), t) }
+
+  def next[M[_]: Monad, T](z: Option[M[BufferedZipper[M, T]]]): Option[M[BufferedZipper[M, T]]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    z.map(mbz => mbz.flatMap(bz => bz.next.getOrElse(mbz)))
+  }
+
+  def prev[M[_]: Monad, T](z: Option[M[BufferedZipper[M, T]]]): Option[M[BufferedZipper[M, T]]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    z.map(mbz => mbz.flatMap(bz => bz.prev.getOrElse(mbz)))
+  }
+
+  //TODO DELETE THIS
+  def getBuff[M[_]: Monad, T](bz : BufferedZipper[M, T]): Vector[Option[T]] =
+    bz.buffer.v
 
   private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
@@ -142,4 +162,27 @@ private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: L
 
 object BufferStats {
   val meter = new MemoryMeter
+}
+
+object M{
+  import scalaz.effect.IO
+  import scalaz.std.list._ //sequence on lists
+  import scalaz.syntax.traverse._ //sequence
+
+  def main(args: Array[String]): Unit = {
+    var effectCount: Int = 0
+    val s = Stream(1, 2, 3)
+    val sWithEffect = s.map(i => IO {effectCount += 1; i})
+    val bz0 = BufferedZipper[IO, Int](sWithEffect, None).get.unsafePerformIO()
+    val bz1 = bz0.next.get.unsafePerformIO()
+    val bz2 = bz1.next.get.unsafePerformIO()
+    val bz3 = bz2.prev.get.unsafePerformIO()
+    val bz4 = bz3.prev.get.unsafePerformIO()
+
+    println(s"0: ${BufferedZipper.getBuff(bz0)}, effectCount: $effectCount")
+    println(s"1: ${BufferedZipper.getBuff(bz1)}, effectCount: $effectCount")
+    println(s"2: ${BufferedZipper.getBuff(bz2)}, effectCount: $effectCount")
+    println(s"1: ${BufferedZipper.getBuff(bz3)}, effectCount: $effectCount")
+    println(s"2: ${BufferedZipper.getBuff(bz4)}, effectCount: $effectCount")
+  }
 }
