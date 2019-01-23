@@ -106,7 +106,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
-      BufferedZipper[Id, Int](inStream, max).fold(inStream.isEmpty)(traverseFromBackToList(_) == inStream.toList)
+      BufferedZipper[Id, Int](inStream, max)
+        .fold(inStream.isEmpty)(traverseFromBackToList(_) == inStream.toList)
   }
 
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
@@ -115,10 +116,16 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .forall(_._2 <= max.wrapped)
   }
 
-  property("buffer is being used when traversed once linearlly") = forAll {
-    (inStream: Stream[Int], max: PositiveLong) =>
-      unzipToListWithBufferSize(BufferedZipper[Id, Int](inStream, Some(max.wrapped + 16)))
-        .forall(_._2 > 0)
+  property("buffer is being used for streams of at least two elements when traversed once linearly") = forAll {
+    (inStream: StreamAtLeast2[Int], max: PositiveLong) =>
+      unzipToListWithBufferSize(BufferedZipper[Id, Int](inStream.wrapped, Some(max.wrapped + 16)))
+        .tail.forall(_._2 > 0)
+  }
+
+  property("buffer is not being used for streams of one or less elements when traversed once linearly") = forAll {
+    (in: Option[Int], max: PositiveLong) =>
+      unzipToListWithBufferSize(BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16)))
+        .forall(_._2 == 0)
   }
 
   // TODO make a better path. Maybe def makes it half way in? how to make a Gen[Path] that has a decent likelihood of touching all elements in the stream?
