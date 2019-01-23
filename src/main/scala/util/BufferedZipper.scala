@@ -56,11 +56,11 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
 
   // returns None instead of appending
   def insertedRight(elem: T): Option[VectorBuffer[T]] =
-    inserted(VectorBuffer.insertRight(v, elem), L, elem)
+    inserted(VectorBuffer.insertedRight(v, elem), L, elem)
 
   // returns None instead of prepending
   def insertedLeft(elem: T): Option[VectorBuffer[T]] =
-    inserted(VectorBuffer.insertLeft(v, elem), R, elem)
+    inserted(VectorBuffer.insertedLeft(v, elem), R, elem)
 
   def inserted(filledBuffer: Option[Vector[Option[T]]], reduceFrom: LR, elem: T): Option[VectorBuffer[T]] =
     filledBuffer.map { fb => shrinkToMax(
@@ -110,15 +110,15 @@ object VectorBuffer {
       .map { stats => if (stats.withinMax) newVB else shrinkToMax(newVB, lr) }
       .getOrElse(newVB)
 
-  private[util] def insertLeft[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
-    insertFrom(v, elem, reverseIndices(v).toList)
+  private[util] def insertedLeft[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
+    insertedFrom(v, elem, reverseIndices(v).toList)
 
-  private[util] def insertRight[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
-    insertFrom(v, elem, v.indices.toList)
+  private[util] def insertedRight[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
+    insertedFrom(v, elem, v.indices.toList)
 
-  private[util] def insertFrom[T](v: Vector[Option[T]], elem: T, indices: List[Int]): Option[Vector[Option[T]]] = indices match {
+  private[util] def insertedFrom[T](v: Vector[Option[T]], elem: T, indices: List[Int]): Option[Vector[Option[T]]] = indices match {
     case i :: _ if v.lift(i).exists(_.isEmpty) => Some(v.updated(i, Some(elem)))
-    case _ :: is                               => insertFrom(v, elem, is)
+    case _ :: is                               => insertedFrom(v, elem, is)
     case Nil                                   => None
   }
 
