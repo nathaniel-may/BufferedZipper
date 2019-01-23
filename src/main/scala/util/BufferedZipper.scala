@@ -28,11 +28,6 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
 }
 
 object BufferedZipper {
-  import scalaz.std.option._ //sequence on options
-  import scalaz.std.list._ //sequence on options
-  import scalaz.syntax.traverse._ //sequence
-
-  private[util] val meter = new MemoryMeter // TODO this could live lower
 
   def apply[M[_]: Monad, T](stream: Stream[M[T]], maxBuffer: Option[Long]): Option[M[BufferedZipper[M, T]]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
@@ -47,9 +42,6 @@ object BufferedZipper {
     stream.toZipper
       .map { zip => val t = zip.focus
                     new BufferedZipper[Id, T](VectorBuffer(maxBuffer).append(t), implicitly[Monad[Id]].point(zip), t) }
-
-  private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
-    bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 }
 
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {

@@ -8,11 +8,11 @@ import org.scalacheck.{Arbitrary, Gen, Properties}
 import Stream.Empty
 import scalaz.Monad
 import scalaz.Scalaz.Id
-import scalaz.effect.IO //IO
-//import scalaz.std.option._ //sequence on options
-//import scalaz.syntax.traverse.{ToFoldableOps => _} //sequence without name collision for folding options
+import scalaz.effect.IO
+import org.github.jamm.MemoryMeter
 
 object BufferedZipperProperties extends Properties("BufferedZipper") {
+  val meter = new MemoryMeter
 
   case class StreamAtLeast2[T](wrapped: Stream[T])
   case class PositiveLong(wrapped: Long)
@@ -70,10 +70,13 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
     def go(z: Option[M[BufferedZipper[M, T]]], l: M[List[(T, Long)]]): M[List[(T, Long)]] =
       z.fold(l)(mbz => mbz.flatMap { bz =>
-        go(bz.next, l.map { lt => (bz.focus, BufferedZipper.measureBufferContents(bz)) :: lt } ) } )
+        go(bz.next, l.map { lt => (bz.focus, measureBufferContents(bz)) :: lt } ) } )
 
     go(in, point(List())).map(_.reverse)
   }
+
+  private[util] def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
+    bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => traverseToList(BufferedZipper[Id, Int](inStream, None)) == inStream.toList
@@ -127,8 +130,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
         (zipper, path) match {
           case (Some(z), next #:: p) =>
-            if (next) z.flatMap(bz => go(bz.next, p, l.map(list => BufferedZipper.measureBufferContents(bz) :: list)))
-            else      z.flatMap(bz => go(bz.prev, p, l.map(list => BufferedZipper.measureBufferContents(bz) :: list)))
+            if (next) z.flatMap(bz => go(bz.next, p, l.map(list => measureBufferContents(bz) :: list)))
+            else      z.flatMap(bz => go(bz.prev, p, l.map(list => measureBufferContents(bz) :: list)))
           case (_, Empty) => l
           case (None, _) => l
         }
