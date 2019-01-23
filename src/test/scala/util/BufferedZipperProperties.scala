@@ -35,23 +35,33 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       case None => l
     }
 
-    go(in, implicitly[Monad[M]].point(List())).map(_.reverse)
+    go(in, point(List())).map(_.reverse)
   }
 
-  def traverseFromBackToList[M[_]: Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[T]] = {
+  def goToEnd[M[_]: Monad, A](bz: BufferedZipper[M,A]): M[BufferedZipper[M,A]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
-    def go(z: Option[M[BufferedZipper[M, T]]], l: M[List[T]]): M[List[T]] = z match {
-      case Some(mbz) => mbz.flatMap(bz => go(bz.prev, l.map(bz.focus :: _)))
-      case None     => l
+    bz.next match {
+      case None      => point(bz)
+      case Some(mbz) => mbz.flatMap(goToEnd(_))
+    }
+  }
+
+  def traverseFromBackToList[M[_]: Monad, T](in: BufferedZipper[M, T]): M[List[T]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(z: BufferedZipper[M, T], l: M[List[T]]): M[List[T]] = z.prev match {
+      case Some(mPrev) => mPrev.flatMap(prev => go(prev, l.map(z.focus :: _)))
+      case None        => l.map(z.focus :: _)
     }
 
     // stops right before it returns None
-    def goToEnd(z: Option[M[BufferedZipper[M, T]]]): Option[M[BufferedZipper[M, T]]] =
-      z.map { mbz => mbz.flatMap { bz => bz.next.flatMap(mNext => goToEnd(Some(mNext))).getOrElse(mbz) } }
+    def goToEnd(z: BufferedZipper[M, T]): M[BufferedZipper[M, T]] =
+      z.next.fold(point(z))(_.flatMap(goToEnd))
 
-    go(goToEnd(in), implicitly[Monad[M]].point(List()))
+    goToEnd(in).flatMap(x => go(x, point(List())))
   }
 
   def unzipToListWithBufferSize[M[_]: Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[(T, Long)]] = {
@@ -62,7 +72,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       z.fold(l)(mbz => mbz.flatMap { bz =>
         go(bz.next, l.map { lt => (bz.focus, BufferedZipper.measureBufferContents(bz)) :: lt } ) } )
 
-    go(in, implicitly[Monad[M]].point(List())).map(_.reverse)
+    go(in, point(List())).map(_.reverse)
   }
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
@@ -92,7 +102,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
-      traverseFromBackToList(BufferedZipper[Id, Int](inStream, max)) == inStream.toList
+      BufferedZipper[Id, Int](inStream, max).fold(inStream.isEmpty)(traverseFromBackToList(_) == inStream.toList)
   }
 
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
@@ -150,8 +160,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     inStream: Stream[Int] => {
       var outsideState: Int = 0
       val inStreamWithEffect = inStream.map( i => IO {outsideState += 1; i} )
-      val sameContents = traverseFromBackToList(BufferedZipper[IO, Int](inStreamWithEffect, None)).unsafePerformIO() == inStream.toList
-      println(s"inStream: ${inStream.toList}, sameContents: $sameContents, effectCount: $outsideState")
+      val sameContents = BufferedZipper[IO, Int](inStreamWithEffect, None).fold(inStream.isEmpty)(_.flatMap(traverseFromBackToList(_)).unsafePerformIO() == inStream.toList)
+      //println(s"inStream: ${inStream.toList}, sameContents: $sameContents, effectCount: $outsideState")
       sameContents && outsideState == inStream.size
     }
   }
