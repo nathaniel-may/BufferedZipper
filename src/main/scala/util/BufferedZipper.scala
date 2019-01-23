@@ -14,17 +14,17 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
   // TODO don't keep a copy of the focus in the buffer
   def next: Option[M[BufferedZipper[M, T]]] =
     zipper.next
-    .map { nextZip => buffer.lift(nextZip.index)
-        .fold((nextZip.focus.map { t => buffer.insertRight(t).getOrElse(buffer.append(t)) }, nextZip))(_ => (implicitly[Monad[M]].point(buffer), nextZip)) }
-    .map { case (mvb, nextZip) => mvb.map(vb => new BufferedZipper(vb, nextZip, vb.lift(nextZip.index).get))}
+    .map { nextZip => buffer.lift(nextZip.index).fold(
+      nextZip.focus.map { t => new BufferedZipper(buffer.insertRight(t).getOrElse(buffer.append(t)), nextZip, t) })(
+      t => implicitly[Monad[M]].point(new BufferedZipper(buffer, nextZip, t))) }
 
   // TODO don't keep a copy of the focus in the buffer
   def prev: Option[M[BufferedZipper[M, T]]] =
     zipper.previous
-      .map { prevZip => buffer.lift(prevZip.index)
-        .fold((prevZip.focus.map { t => buffer.insertLeft(t).get}, prevZip))(_ => (implicitly[Monad[M]].point(buffer), prevZip)) }
-      .map { case (mvb, prevZip) => mvb.map(vb => new BufferedZipper(vb, prevZip, vb.lift(prevZip.index).get)) }
-
+      .map { prevZip => buffer.lift(prevZip.index).fold(
+        prevZip.focus.map { t => new BufferedZipper(buffer.insertLeft(t).get, prevZip, t)})(
+        t => implicitly[Monad[M]].point(new BufferedZipper(buffer, prevZip, t)) ) }
+  
 }
 
 object BufferedZipper {
