@@ -11,19 +11,13 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
 
   val index: Int = zipper.index
 
-  // TODO don't keep a copy of the focus in the buffer
-  def next: Option[M[BufferedZipper[M, T]]] =
-    zipper.next
-    .map { nextZip => buffer.lift(nextZip.index).fold(
-      nextZip.focus.map { t => new BufferedZipper(buffer.insertedRight(t).getOrElse(buffer.append(t)), nextZip, t) })(
-      t => point(new BufferedZipper(buffer, nextZip, t))) }
-
-  // TODO don't keep a copy of the focus in the buffer
-  def prev: Option[M[BufferedZipper[M, T]]] =
-    zipper.previous
-      .map { prevZip => buffer.lift(prevZip.index).fold(
-        prevZip.focus.map { t => new BufferedZipper(buffer.insertedLeft(t).get, prevZip, t)})(
-        t => point(new BufferedZipper(buffer, prevZip, t)) ) }
+  def next: Option[M[BufferedZipper[M, T]]] = zipper.next.map(shiftTo)
+  def prev: Option[M[BufferedZipper[M, T]]] = zipper.previous.map(shiftTo)
+  
+  private[util] def shiftTo(z: Zipper[M[T]]): M[BufferedZipper[M, T]] =
+    buffer.lift(z.index).fold(
+      z.focus.map { t => new BufferedZipper(buffer, z, t)})(
+      t => point(new BufferedZipper(buffer.evict(z.index).updated(index, focus), z, t)) )
 
 }
 
@@ -49,6 +43,10 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
 
   def lift(i: Int): Option[T] = v.lift(i).flatten
 
+  // does not append or prepend
+  def updated(i: Int, t: T): VectorBuffer[T] =
+    v.lift(i).fold(this){ _ => VectorBuffer(v.updated(i, Some(t)), stats.map(_.decreaseBySizeOf(t))) }
+
   def append(elem: T): VectorBuffer[T] =
     shrinkToMax(VectorBuffer(
       v :+ Some(elem),
@@ -73,6 +71,9 @@ private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: O
     val (newV, removedT) = setFirstToNone(v, indices.toList)
     VectorBuffer(newV, stats.map(s => removedT.fold(s)(s.decreaseBySizeOf)))
   }
+
+  def evict(i: Int): VectorBuffer[T] =
+    v.lift(i).fold(this)(elem => new VectorBuffer(v.updated(i, None), stats.map(_.decreaseBySizeOf(elem))))
 
   private[util] def setFirstToNone(buffer: Vector[Option[T]], indices: List[Int]): (Vector[Option[T]], Option[T]) = indices match {
     case i :: _ if buffer(i).isDefined => (buffer.updated(i, None), buffer.lift(i).flatten)
