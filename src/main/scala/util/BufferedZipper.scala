@@ -12,9 +12,10 @@ case class BufferedZipper[M[_]: Monad, T] private(buffer: VectorBuffer[T], zippe
   val index: Int = zipper.index
 
   def next: Option[M[BufferedZipper[M, T]]] = zipper.next.map { zNext =>
-    shiftTo(zNext, buffer => if(buffer.size <= index) buffer.append(focus) else buffer.updated(index, focus).evict(zNext.index)) }
+    shiftTo(zNext, buffer => if(buffer.size <= index) buffer.append(focus) else buffer.evict(zNext.index).updated(index, focus)) }
+  
   def prev: Option[M[BufferedZipper[M, T]]] = zipper.previous.map { zPrev =>
-    shiftTo(zPrev, buffer => buffer.updated(index, focus).evict(zPrev.index)) }
+    shiftTo(zPrev, buffer => buffer.evict(zPrev.index).updated(index, focus)) }
 
   private[util] def shiftTo(z: Zipper[M[T]], shift: VectorBuffer[T] => VectorBuffer[T]): M[BufferedZipper[M, T]] =
     buffer.lift(z.index).fold(
