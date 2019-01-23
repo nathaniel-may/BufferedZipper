@@ -8,8 +8,9 @@ import org.scalacheck.{Arbitrary, Gen, Properties}
 import Stream.Empty
 import scalaz.Monad
 import scalaz.Scalaz.Id
-import scalaz._, effect._, IO._ //IO
-//import scalaz._, std.list._, std.option._, syntax.traverse._ // sequence
+import scalaz.effect.IO //IO
+//import scalaz.std.option._ //sequence on options
+//import scalaz.syntax.traverse.{ToFoldableOps => _} //sequence without name collision for folding options
 
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
@@ -37,17 +38,20 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     go(in, implicitly[Monad[M]].point(List())).map(_.reverse)
   }
 
-  def traverseFromBackToList[T](in: Option[BufferedZipper[Id, T]]): List[T] = {
-    def go(z: Option[BufferedZipper[Id, T]], l: List[T]): List[T] = z match {
-      case Some(bz) => go(bz.prev, bz.focus :: l)
+  def traverseFromBackToList[M[_]: Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[T]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(z: Option[M[BufferedZipper[M, T]]], l: M[List[T]]): M[List[T]] = z match {
+      case Some(mbz) => mbz.flatMap(bz => go(bz.prev, l.map(bz.focus :: _)))
       case None     => l
     }
 
     // stops right before it returns None
-    def goToEnd(z: Option[BufferedZipper[Id, T]]): Option[BufferedZipper[Id, T]] =
-      z.map(_.next.fold(z)(n => goToEnd(Some(n)))).getOrElse(z)
+    def goToEnd(z: Option[M[BufferedZipper[M, T]]]): Option[M[BufferedZipper[M, T]]] =
+      z.map { mbz => mbz.flatMap { bz => bz.next.flatMap(mNext => goToEnd(Some(mNext))).getOrElse(mbz) } }
 
-    go(goToEnd(in), List())
+    go(goToEnd(in), implicitly[Monad[M]].point(List()))
   }
 
   def unzipToListWithBufferSize[M[_]: Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[(T, Long)]] = {
@@ -128,7 +132,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
     (elem: Short, max: PositiveLong) => {
-      var outsideState:     Long = 0
+      var outsideState: Long = 0
       val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })
       val io = for {
         mBuff <- BufferedZipper[IO, Long](instructions, Some(max.wrapped))
@@ -139,6 +143,16 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       io.map { _.unsafePerformIO() }
 
       sameBeforeCall && sameAfterCall
+    }
+  }
+
+  property("effect doesn't happen while the buffer contains everything") = forAll {
+    inStream: Stream[Int] => {
+      var outsideState: Int = 0
+      val inStreamWithEffect = inStream.map( i => IO {outsideState += 1; i} )
+      val sameContents = traverseFromBackToList(BufferedZipper[IO, Int](inStreamWithEffect, None)).unsafePerformIO() == inStream.toList
+      println(s"inStream: ${inStream.toList}, sameContents: $sameContents, effectCount: $outsideState")
+      sameContents && outsideState == inStream.size
     }
   }
 
