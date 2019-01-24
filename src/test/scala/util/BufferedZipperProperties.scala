@@ -5,15 +5,13 @@ import org.scalacheck.Prop.forAll
 import org.scalacheck.Properties
 
 // Scala
-import Stream.Empty
-import scalaz.Monad
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
 
 // Project
 import testingUtil.BufferedZipperFunctions._
-import testingUtil.Arbitrarily.{NonNegLong, StreamAtLeast2, UniqueStreamAtLeast1}
-import testingUtil.Arbitrarily.{aPositiveLong, aStreamAtLeast2, aUniqueStreamAtLeast1}
+import testingUtil.Arbitrarily.{NonNegLong, StreamAtLeast2, UniqueStreamAtLeast1, Path}
+import testingUtil.Arbitrarily.{aPositiveLong, aStreamAtLeast2, aUniqueStreamAtLeast1, aPath}
 
 //TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
 //TODO add test for buffer eviction in the correct direction ....idk how.
@@ -95,11 +93,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .forall(_ == false)
   }
 
-  // TODO make a better path. Maybe def makes it half way in? how to make a Gen[Path] that has a decent likelihood of touching all elements in the stream?
   property("buffer limit is never exceeded on a random path") = forAll {
-    (inStream: Stream[Int], path: Stream[Boolean], max: NonNegLong) =>
+    (inStream: Stream[Int], path: Path, max: NonNegLong) =>
       BufferedZipper[Id, Int](inStream, Some(max.wrapped))
-        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path))
+        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.wrapped))
         .forall(_ <= max.wrapped)
   }
 
