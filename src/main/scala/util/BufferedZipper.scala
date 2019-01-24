@@ -40,8 +40,6 @@ object BufferedZipper {
       .map { zip => val t = zip.focus
                     new BufferedZipper[Id, T](VectorBuffer(maxBuffer), implicitly[Monad[Id]].point(zip), t) }
 
-  //TODO DELETE
-  def getBuff[M[_]: Monad, T](bz: BufferedZipper[M, T]) = (bz.focus, bz.buffer.v)
 }
 
 private[util] case class VectorBuffer[T] private (v: Vector[Option[T]], stats: Option[BufferStats]) {
@@ -142,4 +140,20 @@ private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: L
 
 object BufferStats {
   val meter = new MemoryMeter
+}
+
+// TODO what is the meter really measuring in? remember this is measuring all the weird java things like locks and stuff.
+object M {
+  def main(args: Array[String]): Unit = {
+    val meter = new MemoryMeter
+    val byte:  Byte  = 0
+    val short: Short = 5
+    val int:   Int   = 5
+    val long:  Long  = 5L
+
+    println(s"byte:  ${meter.measureDeep(byte)}")
+    println(s"short: ${meter.measureDeep(short)}")
+    println(s"int:   ${meter.measureDeep(int)}")
+    println(s"long:  ${meter.measureDeep(long)}")
+  }
 }

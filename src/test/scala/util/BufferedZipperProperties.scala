@@ -11,12 +11,18 @@ import scalaz.Scalaz.Id
 import scalaz.effect.IO
 import org.github.jamm.MemoryMeter
 
+//TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
+//TODO add a test to make sure the focus is not in the buffer (unique input, add contains helper function here.)
 //TODO add test for buffer eviction in the correct direction
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val meter = new MemoryMeter
 
-  case class StreamAtLeast2[T](wrapped: Stream[T])
+  case class StreamAtLeast2[A](wrapped: Stream[A])
   case class PositiveLong(wrapped: Long)
+  case class UniqueStreamAtLeast1[A](wrapped: Stream[A])
+
+  implicit val aUniqueStreamAtLeast1: Arbitrary[UniqueStreamAtLeast1[Int]] =
+    Arbitrary(Gen.atLeastOne(-20 to 20).map(seq => UniqueStreamAtLeast1(seq.toStream)))
 
   implicit val aStreamAtLeast2: Arbitrary[StreamAtLeast2[Int]] = Arbitrary((for {
     l1 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
@@ -26,18 +32,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   implicit val aPositiveLong: Arbitrary[PositiveLong] =
     Arbitrary(Gen.choose(0, Long.MaxValue).map(PositiveLong))
 
-  def traverseToList[M[_] : Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[T]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
-    // TODO make stack-safe
-    def go(z: Option[M[BufferedZipper[M, T]]], l: M[List[T]]): M[List[T]] = z match {
-      case Some(mbz) => mbz.map { bz => go(bz.next, l.map(bz.focus :: _)) }.flatMap(x => x) // TODO, no flatten???
-      case None => l
-    }
-
-    go(in, point(List())).map(_.reverse)
-  }
+  //TODO add to type?
+  def toList[M[_] : Monad, A](in: BufferedZipper[M, A]): M[List[A]] =
+    unzipAndMap[M, A, A](in, bs => bs.focus)
 
   def goToEnd[M[_]: Monad, A](bz: BufferedZipper[M,A]): M[BufferedZipper[M,A]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
@@ -49,51 +46,63 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
   }
 
-  def traverseFromBackToList[M[_]: Monad, T](in: BufferedZipper[M, T]): M[List[T]] = {
+  def traverseFromBackToList[M[_]: Monad, A](in: BufferedZipper[M, A]): M[List[A]] =
+    unzipAndMapBackwards[M, A, A](in, bs => bs.focus)
+
+  def unzipToListOfBufferSize[M[_]: Monad, A](in: BufferedZipper[M, A]): M[List[Long]] =
+    unzipAndMap[M, A, Long](in, bs => measureBufferContents(bs))
+
+  def unzipAndMap[M[_] : Monad, A, B](in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
-    def go(z: BufferedZipper[M, T], l: M[List[T]]): M[List[T]] = z.prev match {
-      case Some(mPrev) => mPrev.flatMap(prev => go(prev, l.map(z.focus :: _)))
-      case None        => l.map(z.focus :: _)
+    def go(z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] =
+      z.next.fold(l.map(f(z) :: _))(mbz => mbz.flatMap(zNext =>
+        go(zNext, l.map(f(z) :: _))))
+
+    go(in, point(List())).map(_.reverse)
+  }
+
+  def unzipAndMapBackwards[M[_]: Monad, A, B](in: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] = z.prev match {
+      case Some(mPrev) => mPrev.flatMap(prev => go(prev, l.map(f(z) :: _)))
+      case None        => l.map(f(z) :: _)
     }
 
     // stops right before it returns None
-    def goToEnd(z: BufferedZipper[M, T]): M[BufferedZipper[M, T]] =
+    def goToEnd(z: BufferedZipper[M, A]): M[BufferedZipper[M, A]] =
       z.next.fold(point(z))(_.flatMap(goToEnd))
 
     goToEnd(in).flatMap(x => go(x, point(List())))
   }
 
-  def unzipToListWithBufferSize[M[_]: Monad, T](in: Option[M[BufferedZipper[M, T]]]): M[List[(T, Long)]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
+  def bufferContains[M[_]: Monad, A](bs: BufferedZipper[M, A], elem: A): Boolean =
+    bs.buffer.v.contains(Some(elem))
 
-    def go(z: Option[M[BufferedZipper[M, T]]], l: M[List[(T, Long)]]): M[List[(T, Long)]] =
-      z.fold(l)(mbz => mbz.flatMap { bz =>
-        go(bz.next, l.map { lt => (bz.focus, measureBufferContents(bz)) :: lt } ) } )
-
-    go(in, point(List())).map(_.reverse)
-  }
-
-  def measureBufferContents[M[_]: Monad, T](bs: BufferedZipper[M, T]): Long =
+  def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
-    inStream: Stream[Int] => traverseToList(BufferedZipper[Id, Int](inStream, None)) == inStream.toList
+    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
+      .fold[List[Int]](List())(toList(_)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input with a small buffer limit") = forAll {
-    inStream: Stream[Int] => traverseToList(BufferedZipper[Id, Int](inStream, Some(100L))) == inStream.toList
+    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(100L))
+      .fold[List[Int]](List())(toList(_)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input with a buffer limit of 0") = forAll {
-    inStream: Stream[Int] => traverseToList(BufferedZipper[Id, Int](inStream, Some(0L))) == inStream.toList
+    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(0L))
+      .fold[List[Int]](List())(toList(_)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
-      traverseToList(BufferedZipper[Id, Int](inStream, max)) == inStream.toList
+      BufferedZipper[Id, Int](inStream, max).fold[List[Int]](List())(toList(_)) == inStream.toList
   }
 
   property("next then prev should result in the first element regardless of buffer limit") = forAll {
@@ -112,27 +121,39 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
     (inStream: Stream[Int], max: PositiveLong) =>
-      unzipToListWithBufferSize(BufferedZipper[Id, Int](inStream, Some(max.wrapped)))
-        .forall(_._2 <= max.wrapped)
+      BufferedZipper[Id, Int](inStream, Some(max.wrapped))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .forall(_ <= max.wrapped)
   }
 
   property("buffer is being used for streams of at least two elements when traversed once linearly") = forAll {
     (inStream: StreamAtLeast2[Int], max: PositiveLong) =>
-      unzipToListWithBufferSize(BufferedZipper[Id, Int](inStream.wrapped, Some(max.wrapped + 16)))
-        .tail.forall(_._2 > 0)
+      BufferedZipper[Id, Int](inStream.wrapped, Some(max.wrapped + 16))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .tail.forall(_ > 0)
   }
 
+  //TODO use a function that goes backwards too
   property("buffer is not being used for streams of one or less elements when traversed once linearly") = forAll {
     (in: Option[Int], max: PositiveLong) =>
-      unzipToListWithBufferSize(BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16)))
-        .forall(_._2 == 0)
+      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .forall(_ == 0)
+  }
+
+  //TODO use a function that goes backwards too.
+  property("buffer never contains the focus") = forAll {
+    (inStream: UniqueStreamAtLeast1[Int], max: PositiveLong) =>
+      BufferedZipper(inStream.wrapped, Some(max.wrapped + 16))
+        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus)))
+        .forall(_ == false)
   }
 
   // TODO make a better path. Maybe def makes it half way in? how to make a Gen[Path] that has a decent likelihood of touching all elements in the stream?
-  // TOOD make stack-safe
+  // TODO make stack-safe?
   property("buffer limit is never exceeded on a random path") = forAll {
     (inStream: Stream[Int], path: Stream[Boolean], max: PositiveLong) => {
-      def go[M[_] : Monad, T](zipper: Option[M[BufferedZipper[M, T]]], path: Stream[Boolean], l: M[List[Long]]): M[List[Long]] = {
+      def go[M[_] : Monad, A](zipper: Option[M[BufferedZipper[M, A]]], path: Stream[Boolean], l: M[List[Long]]): M[List[Long]] = {
         val monadSyntax = implicitly[Monad[M]].monadSyntax
         import monadSyntax._
 
