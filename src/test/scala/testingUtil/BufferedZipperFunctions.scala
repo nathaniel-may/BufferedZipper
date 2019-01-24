@@ -4,6 +4,8 @@ import scalaz.Monad
 import util.BufferedZipper
 import org.github.jamm.MemoryMeter
 
+import scala.collection.immutable.Stream.Empty
+
 object BufferedZipperFunctions {
   val meter = new MemoryMeter
 
@@ -16,6 +18,18 @@ object BufferedZipperFunctions {
 
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
+
+  def unzipAndMapViaPath[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[Boolean]): M[List[B]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(z: BufferedZipper[M, A], p: Stream[Boolean], l: M[List[B]]): M[List[B]] = p match {
+      case p #:: ps => (if(p) z.next else z.prev).fold(l)(mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))))
+      case Empty => l
+    }
+
+    go(zipper, path, point(List()))
+  }
 
   //TODO add to type?
   def toList[M[_] : Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[A]] =

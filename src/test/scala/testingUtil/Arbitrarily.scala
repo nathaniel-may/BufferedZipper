@@ -4,7 +4,7 @@ import org.scalacheck.{Arbitrary, Gen}
 
 object Arbitrarily {
 
-  case class PositiveLong(wrapped: Long)
+  case class NonNegLong(wrapped: Long)
   case class StreamAtLeast2[A](wrapped: Stream[A])
   case class UniqueStreamAtLeast1[A](wrapped: Stream[A])
 
@@ -16,7 +16,7 @@ object Arbitrarily {
     l2 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
   } yield l1 ::: l2).map(l => StreamAtLeast2(l.toStream)))
 
-  implicit val aPositiveLong: Arbitrary[PositiveLong] =
-    Arbitrary(Gen.choose(0, Long.MaxValue).map(PositiveLong))
+  implicit val aPositiveLong: Arbitrary[NonNegLong] =
+    Arbitrary(Gen.choose(0, Long.MaxValue).map(NonNegLong))
 
 }
