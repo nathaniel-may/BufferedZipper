@@ -12,14 +12,17 @@ import scalaz.effect.IO
 import org.github.jamm.MemoryMeter
 
 //TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
-//TODO add a test to make sure the focus is not in the buffer (unique input, add contains helper function here.)
-//TODO add test for buffer eviction in the correct direction
+//TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val meter = new MemoryMeter
 
   case class StreamAtLeast2[A](wrapped: Stream[A])
   case class PositiveLong(wrapped: Long)
   case class UniqueStreamAtLeast1[A](wrapped: Stream[A])
+
+  trait Direction
+  object Forwards  extends Direction
+  object Backwards extends Direction
 
   implicit val aUniqueStreamAtLeast1: Arbitrary[UniqueStreamAtLeast1[Int]] =
     Arbitrary(Gen.atLeastOne(-20 to 20).map(seq => UniqueStreamAtLeast1(seq.toStream)))
@@ -33,8 +36,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     Arbitrary(Gen.choose(0, Long.MaxValue).map(PositiveLong))
 
   //TODO add to type?
-  def toList[M[_] : Monad, A](in: BufferedZipper[M, A]): M[List[A]] =
-    unzipAndMap[M, A, A](in, bs => bs.focus)
+  def toList[M[_] : Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[A]] =
+    unzipAndMap[M, A, A](dir, in, bs => bs.focus)
 
   def goToEnd[M[_]: Monad, A](bz: BufferedZipper[M,A]): M[BufferedZipper[M,A]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
@@ -46,13 +49,15 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
   }
 
-  def traverseFromBackToList[M[_]: Monad, A](in: BufferedZipper[M, A]): M[List[A]] =
-    unzipAndMapBackwards[M, A, A](in, bs => bs.focus)
+  def unzipToListOfBufferSize[M[_]: Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[Long]] =
+    unzipAndMap[M, A, Long](dir, in, bs => measureBufferContents(bs))
 
-  def unzipToListOfBufferSize[M[_]: Monad, A](in: BufferedZipper[M, A]): M[List[Long]] =
-    unzipAndMap[M, A, Long](in, bs => measureBufferContents(bs))
+  def unzipAndMap[M[_] : Monad, A, B](dir: Direction, in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = dir match {
+    case Forwards  => unzipAndMapForwards (in, f)
+    case Backwards => unzipAndMapBackwards(in, f)
+  }
 
-  def unzipAndMap[M[_] : Monad, A, B](in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = {
+  def unzipAndMapForwards[M[_] : Monad, A, B](in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
@@ -87,22 +92,22 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
-      .fold[List[Int]](List())(toList(_)) == inStream.toList
+      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input with a small buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(100L))
-      .fold[List[Int]](List())(toList(_)) == inStream.toList
+      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input with a buffer limit of 0") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(0L))
-      .fold[List[Int]](List())(toList(_)) == inStream.toList
+      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
   property("list of unzipped elements is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
-      BufferedZipper[Id, Int](inStream, max).fold[List[Int]](List())(toList(_)) == inStream.toList
+      BufferedZipper[Id, Int](inStream, max).fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
   property("next then prev should result in the first element regardless of buffer limit") = forAll {
@@ -116,36 +121,48 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
       BufferedZipper[Id, Int](inStream, max)
-        .fold(inStream.isEmpty)(traverseFromBackToList(_) == inStream.toList)
+        .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
     (inStream: Stream[Int], max: PositiveLong) =>
       BufferedZipper[Id, Int](inStream, Some(max.wrapped))
-        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
         .forall(_ <= max.wrapped)
   }
 
   property("buffer is being used for streams of at least two elements when traversed once linearly") = forAll {
     (inStream: StreamAtLeast2[Int], max: PositiveLong) =>
       BufferedZipper[Id, Int](inStream.wrapped, Some(max.wrapped + 16))
-        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
         .tail.forall(_ > 0)
   }
 
-  //TODO use a function that goes backwards too
-  property("buffer is not being used for streams of one or less elements when traversed once linearly") = forAll {
+  property("buffer is not being used for streams of one or less elements when traversed once forwards") = forAll {
     (in: Option[Int], max: PositiveLong) =>
       BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16))
-        .fold[List[Long]](List())(unzipToListOfBufferSize(_))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
         .forall(_ == 0)
   }
 
-  //TODO use a function that goes backwards too.
-  property("buffer never contains the focus") = forAll {
+  property("buffer is not being used for streams of one or less elements when traversed backwards") = forAll {
+    (in: Option[Int], max: PositiveLong) =>
+      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16))
+        .fold[List[Long]](List())(unzipToListOfBufferSize(Backwards, _))
+        .forall(_ == 0)
+  }
+
+  property("buffer never contains the focus when traversed once forwards") = forAll {
     (inStream: UniqueStreamAtLeast1[Int], max: PositiveLong) =>
       BufferedZipper(inStream.wrapped, Some(max.wrapped + 16))
-        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus)))
+        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Forwards, in, bs => bufferContains(bs, bs.focus)))
+        .forall(_ == false)
+  }
+
+  property("buffer never contains the focus when traversed backwards") = forAll {
+    (inStream: UniqueStreamAtLeast1[Int], max: PositiveLong) =>
+      BufferedZipper(inStream.wrapped, Some(max.wrapped + 16))
+        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Backwards, in, bs => bufferContains(bs, bs.focus)))
         .forall(_ == false)
   }
 
@@ -192,8 +209,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     inStream: Stream[Int] => {
       var outsideState: Int = 0
       val inStreamWithEffect = inStream.map( i => IO {outsideState += 1; i} )
-      val sameContents = BufferedZipper[IO, Int](inStreamWithEffect, None).fold(inStream.isEmpty)(_.flatMap(traverseFromBackToList(_)).unsafePerformIO() == inStream.toList)
-      //println(s"inStream: ${inStream.toList}, sameContents: $sameContents, effectCount: $outsideState")
+      val sameContents = BufferedZipper[IO, Int](inStreamWithEffect, None)
+        .fold(inStream.isEmpty)(_.flatMap(toList(Backwards, _)).unsafePerformIO() == inStream.toList)
       sameContents && outsideState == inStream.size
     }
   }
