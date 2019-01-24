@@ -2,93 +2,22 @@ package util
 
 // Scalacheck
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen, Properties}
+import org.scalacheck.Properties
 
 // Scala
 import Stream.Empty
 import scalaz.Monad
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
-import org.github.jamm.MemoryMeter
+
+// Project
+import testingUtil.BufferedZipperFunctions._
+import testingUtil.Arbitrarily.{PositiveLong, StreamAtLeast2, UniqueStreamAtLeast1}
+import testingUtil.Arbitrarily.{aPositiveLong, aStreamAtLeast2, aUniqueStreamAtLeast1}
 
 //TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
-  val meter = new MemoryMeter
-
-  case class StreamAtLeast2[A](wrapped: Stream[A])
-  case class PositiveLong(wrapped: Long)
-  case class UniqueStreamAtLeast1[A](wrapped: Stream[A])
-
-  trait Direction
-  object Forwards  extends Direction
-  object Backwards extends Direction
-
-  implicit val aUniqueStreamAtLeast1: Arbitrary[UniqueStreamAtLeast1[Int]] =
-    Arbitrary(Gen.atLeastOne(-20 to 20).map(seq => UniqueStreamAtLeast1(seq.toStream)))
-
-  implicit val aStreamAtLeast2: Arbitrary[StreamAtLeast2[Int]] = Arbitrary((for {
-    l1 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
-    l2 <- Gen.nonEmptyListOf[Int](Gen.choose(Int.MinValue, Int.MaxValue))
-  } yield l1 ::: l2).map(l => StreamAtLeast2(l.toStream)))
-
-  implicit val aPositiveLong: Arbitrary[PositiveLong] =
-    Arbitrary(Gen.choose(0, Long.MaxValue).map(PositiveLong))
-
-  //TODO add to type?
-  def toList[M[_] : Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[A]] =
-    unzipAndMap[M, A, A](dir, in, bs => bs.focus)
-
-  def goToEnd[M[_]: Monad, A](bz: BufferedZipper[M,A]): M[BufferedZipper[M,A]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
-    bz.next match {
-      case None      => point(bz)
-      case Some(mbz) => mbz.flatMap(goToEnd(_))
-    }
-  }
-
-  def unzipToListOfBufferSize[M[_]: Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[Long]] =
-    unzipAndMap[M, A, Long](dir, in, bs => measureBufferContents(bs))
-
-  def unzipAndMap[M[_] : Monad, A, B](dir: Direction, in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = dir match {
-    case Forwards  => unzipAndMapForwards (in, f)
-    case Backwards => unzipAndMapBackwards(in, f)
-  }
-
-  def unzipAndMapForwards[M[_] : Monad, A, B](in: BufferedZipper[M, A], f:BufferedZipper[M, A] => B) : M[List[B]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
-    def go(z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] =
-      z.next.fold(l.map(f(z) :: _))(mbz => mbz.flatMap(zNext =>
-        go(zNext, l.map(f(z) :: _))))
-
-    go(in, point(List())).map(_.reverse)
-  }
-
-  def unzipAndMapBackwards[M[_]: Monad, A, B](in: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
-    def go(z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] = z.prev match {
-      case Some(mPrev) => mPrev.flatMap(prev => go(prev, l.map(f(z) :: _)))
-      case None        => l.map(f(z) :: _)
-    }
-
-    // stops right before it returns None
-    def goToEnd(z: BufferedZipper[M, A]): M[BufferedZipper[M, A]] =
-      z.next.fold(point(z))(_.flatMap(goToEnd))
-
-    goToEnd(in).flatMap(x => go(x, point(List())))
-  }
-
-  def bufferContains[M[_]: Monad, A](bs: BufferedZipper[M, A], elem: A): Boolean =
-    bs.buffer.v.contains(Some(elem))
-
-  def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
-    bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
