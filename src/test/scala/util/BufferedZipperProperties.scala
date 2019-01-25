@@ -13,9 +13,15 @@ import testingUtil.BufferedZipperFunctions._
 import testingUtil.Arbitrarily.{StreamAtLeast2, UniqueStreamAtLeast1, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
 import testingUtil.Arbitrarily.{aStreamAtLeast2, aUniqueStreamAtLeast1, aPath, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
 
-//TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
+
+  // TODO with path so that buffer gets holes in it and focus isn't always at the head
+  // TODO add test for this and effect counter. If something has been pulled into the buffer without being evicted it shouldn't do the effect again to put it into a list
+  property("to List returns the same as streamInput.toList") = forAll {
+    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
+      .fold[List[Int]](List())(_.toList) == inStream.toList
+  }
 
   property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
