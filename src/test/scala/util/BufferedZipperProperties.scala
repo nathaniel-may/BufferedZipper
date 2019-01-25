@@ -10,8 +10,8 @@ import scalaz.effect.IO
 
 // Project
 import testingUtil.BufferedZipperFunctions._
-import testingUtil.Arbitrarily.{NonNegLong, StreamAtLeast2, UniqueStreamAtLeast1, Path}
-import testingUtil.Arbitrarily.{aPositiveLong, aStreamAtLeast2, aUniqueStreamAtLeast1, aPath}
+import testingUtil.Arbitrarily.{StreamAtLeast2, UniqueStreamAtLeast1, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
+import testingUtil.Arbitrarily.{aStreamAtLeast2, aUniqueStreamAtLeast1, aPath, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
 
 //TODO make positiveLong a "meaningfulbuffer" so it's at least 16 units long
 //TODO add test for buffer eviction in the correct direction ....idk how.
@@ -52,60 +52,60 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
-    (inStream: Stream[Int], max: NonNegLong) =>
-      BufferedZipper[Id, Int](inStream, Some(max.wrapped))
+    (inStream: Stream[Int], size: LimitedBufferSize) =>
+      BufferedZipper[Id, Int](inStream, Some(size.max))
         .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
-        .forall(_ <= max.wrapped)
+        .forall(_ <= size.max)
   }
 
   property("buffer is being used for streams of at least two elements when traversed once linearly") = forAll {
-    (inStream: StreamAtLeast2[Int], max: NonNegLong) =>
-      BufferedZipper[Id, Int](inStream.wrapped, Some(max.wrapped + 16))
+    (inStream: StreamAtLeast2[Int], size: NonZeroBufferSize) =>
+      BufferedZipper[Id, Int](inStream.wrapped, size.max)
         .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
         .tail.forall(_ > 0)
   }
 
   property("buffer is not being used for streams of one or less elements when traversed once forwards") = forAll {
-    (in: Option[Int], max: NonNegLong) =>
-      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16))
+    (in: Option[Int], size: NonZeroBufferSize) =>
+      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
         .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
         .forall(_ == 0)
   }
 
   property("buffer is not being used for streams of one or less elements when traversed backwards") = forAll {
-    (in: Option[Int], max: NonNegLong) =>
-      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), Some(max.wrapped + 16))
+    (in: Option[Int], size: NonZeroBufferSize) =>
+      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
         .fold[List[Long]](List())(unzipToListOfBufferSize(Backwards, _))
         .forall(_ == 0)
   }
 
   property("buffer never contains the focus when traversed once forwards") = forAll {
-    (inStream: UniqueStreamAtLeast1[Int], max: NonNegLong) =>
-      BufferedZipper(inStream.wrapped, Some(max.wrapped + 16))
+    (inStream: UniqueStreamAtLeast1[Int], size: NonZeroBufferSize) =>
+      BufferedZipper(inStream.wrapped, size.max)
         .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Forwards, in, bs => bufferContains(bs, bs.focus)))
         .forall(_ == false)
   }
 
   property("buffer never contains the focus when traversed backwards") = forAll {
-    (inStream: UniqueStreamAtLeast1[Int], max: NonNegLong) =>
-      BufferedZipper(inStream.wrapped, Some(max.wrapped + 16))
+    (inStream: UniqueStreamAtLeast1[Int], size: NonZeroBufferSize) =>
+      BufferedZipper(inStream.wrapped, size.max)
         .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Backwards, in, bs => bufferContains(bs, bs.focus)))
         .forall(_ == false)
   }
 
   property("buffer limit is never exceeded on a random path") = forAll {
-    (inStream: Stream[Int], path: Path, max: NonNegLong) =>
-      BufferedZipper[Id, Int](inStream, Some(max.wrapped))
+    (inStream: Stream[Int], path: Path, size: LimitedBufferSize) =>
+      BufferedZipper[Id, Int](inStream, Some(size.max))
         .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.wrapped))
-        .forall(_ <= max.wrapped)
+        .forall(_ <= size.max)
   }
 
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
-    (elem: Short, max: NonNegLong) => {
+    (elem: Short, size: BufferSize) => {
       var outsideState: Long = 0
       val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })
       val io = for {
-        mBuff <- BufferedZipper[IO, Long](instructions, Some(max.wrapped))
+        mBuff <- BufferedZipper[IO, Long](instructions, size.max)
         focus =  for { buff <- mBuff } yield buff.focus
       } yield focus
       val      sameBeforeCall = outsideState == 0
