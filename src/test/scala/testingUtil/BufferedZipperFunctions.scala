@@ -3,7 +3,7 @@ package testingUtil
 import scalaz.Monad
 import util.BufferedZipper
 import org.github.jamm.MemoryMeter
-import testingUtil.Arbitrarily.{Next, Prev, PrevNext}
+import testingUtil.Arbitrarily.{PrevNext, N, P}
 
 import scala.collection.immutable.Stream.Empty
 
@@ -25,8 +25,9 @@ object BufferedZipperFunctions {
     import monadSyntax._
 
     def go(z: BufferedZipper[M, A], steps: Stream[PrevNext], l: M[List[B]]): M[List[B]] = steps match {
-      case p #:: ps => (p match {case Next => z.next; case Prev => z.prev})
-                         .fold(l)(mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))))
+      case p #:: ps => (p match {case _: N => z.next; case _: P => z.prev}).fold(
+                          throw new Exception("GENERATED PATH WALKED OFF THE ZIPPER. FIX THE PATH GEN."))(
+                          mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))))
       case Empty => l
     }
 

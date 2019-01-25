@@ -2,19 +2,30 @@ package util
 
 // Scalacheck
 import org.scalacheck.Prop.forAll
-import org.scalacheck.Properties
+import org.scalacheck.{Arbitrary, Gen, Properties}, Arbitrary.{arbLong, arbOption}
+import testingUtil.Arbitrarily.boundedStreamAndPathsGen
 
 // Scala
+import scalaz.Monad
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
 
 // Project
 import testingUtil.BufferedZipperFunctions._
-import testingUtil.Arbitrarily.{StreamAtLeast2, UniqueStreamAtLeast1, StreamAndPaths, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
-import testingUtil.Arbitrarily.{aStreamAtLeast2, aUniqueStreamAtLeast1, anIdIntStreamAndPaths, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
+import testingUtil.Arbitrarily.{StreamAndPaths, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
+import testingUtil.Arbitrarily.{anIdIntStreamAndPaths, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
+
+//  case class StreamAndPathsAtLeast2[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path])
+//  case class UniqueStreamAndPathsAtLeast1[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path])
+
+//  implicit val aIdIntStreamAtLeast2: Arbitrary[StreamAndPathsAtLeast2[Id, Int]] =
+//    Arbitrary(boundedStreamAndPathsGen(2, Int.MaxValue).map(x => UniqueStreamAndPathsAtLeast1(x.stream, x.pathGen)))
+//
+//  implicit val aIdIntStreamAtLeast2: Arbitrary[UniqueStreamAndPathsAtLeast1] =
+//    Arbitrary(boundedUniqueStreamAndPathsGen(1, Int.MaxValue).map(x => UniqueStreamAndPathsAtLeast1(x.stream, x.pathGen)))
 
   // TODO with path so that buffer gets holes in it and focus isn't always at the head
   // TODO add test for this and effect counter. If something has been pulled into the buffer without being evicted it shouldn't do the effect again to put it into a list
@@ -43,13 +54,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       BufferedZipper[Id, Int](inStream, max).fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
-  property("next then prev should result in the first element regardless of buffer limit") = forAll {
-    (inStream: StreamAtLeast2[Int], max: Option[Long]) => (for {
-      zipper <- BufferedZipper[Id, Int](inStream.wrapped, max)
-      next   <- zipper.next
-      prev   <- next.prev
-    } yield prev.focus) == inStream.wrapped.headOption
-  }
+  property("next then prev should result in the first element regardless of buffer limit") =
+    forAll(boundedStreamAndPathsGen(2, Int.MaxValue), arbOption[Long](arbLong).arbitrary) {
+      (sp: StreamAndPaths[Id, Int], max: Option[Long]) => (for {
+        zipper <- BufferedZipper[Id, Int](sp.stream, max)
+        next   <- zipper.next
+        prev   <- next.prev
+      } yield prev.focus) == sp.stream.headOption
+    }
 
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
     (inStream: Stream[Int], max: Option[Long]) =>
@@ -57,6 +69,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
+  //TODO pathify
   property("buffer limit is never exceeded when traversed once linearlly") = forAll {
     (inStream: Stream[Int], size: LimitedBufferSize) =>
       BufferedZipper[Id, Int](inStream, Some(size.max))
@@ -64,13 +77,18 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .forall(_ <= size.max)
   }
 
-  property("buffer is being used for streams of at least two elements when traversed once linearly") = forAll {
-    (inStream: StreamAtLeast2[Int], size: NonZeroBufferSize) =>
-      BufferedZipper[Id, Int](inStream.wrapped, size.max)
-        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
-        .tail.forall(_ > 0)
-  }
+  //TODO THIS IS THE ONE I WAS WORKING ON
+  property("buffer is being used for streams of at least two elements") =
+    forAll(boundedStreamAndPathsGen(2, Int.MaxValue), aNonZeroBufferSize.arbitrary) {
+      (sp: StreamAndPaths[Id, Int], size: NonZeroBufferSize) => forAll(sp.pathGen) { path: Path =>
+        println(s"STREAM: ${sp.stream.toList}")
+        println(s"PATH  : ${path.steps.toList}")
+        BufferedZipper[Id, Int](sp.stream, size.max)
+          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
+          .tail.forall(_ > 0) }
+    }
 
+  //TODO pathify
   property("buffer is not being used for streams of one or less elements when traversed once forwards") = forAll {
     (in: Option[Int], size: NonZeroBufferSize) =>
       BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
@@ -78,6 +96,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .forall(_ == 0)
   }
 
+  //TODO see above^^
   property("buffer is not being used for streams of one or less elements when traversed backwards") = forAll {
     (in: Option[Int], size: NonZeroBufferSize) =>
       BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
@@ -85,27 +104,21 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .forall(_ == 0)
   }
 
-  property("buffer never contains the focus when traversed once forwards") = forAll {
-    (inStream: UniqueStreamAtLeast1[Int], size: NonZeroBufferSize) =>
-      BufferedZipper(inStream.wrapped, size.max)
-        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Forwards, in, bs => bufferContains(bs, bs.focus)))
-        .forall(_ == false)
+  property("buffer never contains the focus") = forAll {
+    (sp: StreamAndPaths[Id, Int], size: NonZeroBufferSize) => forAll(sp.pathGen) { path: Path =>
+      BufferedZipper(sp.stream, size.max)
+        .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), path.steps))
+        .forall(_ == false) }
   }
 
-  property("buffer never contains the focus when traversed backwards") = forAll {
-    (inStream: UniqueStreamAtLeast1[Int], size: NonZeroBufferSize) =>
-      BufferedZipper(inStream.wrapped, size.max)
-        .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Backwards, in, bs => bufferContains(bs, bs.focus)))
-        .forall(_ == false)
-  }
-
-  property("buffer limit is never exceeded on a random path") = forAll {
+  property("buffer limit is never exceeded") = forAll {
     (sp: StreamAndPaths[Id, Int], size: LimitedBufferSize) => forAll(sp.pathGen) { path: Path =>
-      BufferedZipper[Id, Int](sp.buffZip, Some(size.max))
+      BufferedZipper[Id, Int](sp.stream, Some(size.max))
         .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.steps))
         .forall(_ <= size.max) }
   }
 
+  // TODO replace var with state monad
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
     (elem: Short, size: BufferSize) => {
       var outsideState: Long = 0
@@ -122,6 +135,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
   }
 
+  // TODO pathify with random starting point?
   property("effect doesn't happen while the buffer contains everything") = forAll {
     inStream: Stream[Int] => {
       var outsideState: Int = 0
