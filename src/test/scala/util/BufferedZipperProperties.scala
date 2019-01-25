@@ -10,8 +10,8 @@ import scalaz.effect.IO
 
 // Project
 import testingUtil.BufferedZipperFunctions._
-import testingUtil.Arbitrarily.{StreamAtLeast2, UniqueStreamAtLeast1, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
-import testingUtil.Arbitrarily.{aStreamAtLeast2, aUniqueStreamAtLeast1, aPath, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
+import testingUtil.Arbitrarily.{StreamAtLeast2, UniqueStreamAtLeast1, StreamAndPaths, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
+import testingUtil.Arbitrarily.{aStreamAtLeast2, aUniqueStreamAtLeast1, anIdIntStreamAndPaths, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
@@ -100,10 +100,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   property("buffer limit is never exceeded on a random path") = forAll {
-    (inStream: Stream[Int], path: Path, size: LimitedBufferSize) =>
-      BufferedZipper[Id, Int](inStream, Some(size.max))
-        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.wrapped))
-        .forall(_ <= size.max)
+    (sp: StreamAndPaths[Id, Int], size: LimitedBufferSize) => forAll(sp.pathGen) { path: Path =>
+      BufferedZipper[Id, Int](sp.buffZip, Some(size.max))
+        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.steps))
+        .forall(_ <= size.max) }
   }
 
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
