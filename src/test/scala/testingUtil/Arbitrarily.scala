@@ -35,6 +35,7 @@ object Arbitrarily {
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGenOf(50))
 
+  //TODO write a gen like this: def input: Gen[(BufferedZipper, Gen[Path])] and use it with a nested call to forAll in the property. Make sure to use Gen.sized on both here.
   private def pathGenOf(length: Int): Gen[Path] = {
     def go(len: Int, path: Gen[Stream[Boolean]]): Gen[Stream[Boolean]] =
       if(len == 0) path

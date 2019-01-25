@@ -8,14 +8,18 @@ import org.github.jamm.MemoryMeter
 case class BufferedZipper[M[_]: Monad, A] private(buffer: VectorBuffer[A], zipper: Zipper[M[A]], focus: A){
   private val monadSyntax = implicitly[Monad[M]].monadSyntax
   import monadSyntax._
-
+  // TODO sizing buffer should maybe sometimes INCLUDE focus?
   val index: Int = zipper.index
-
   def next: Option[M[BufferedZipper[M, A]]] = zipper.next.map { zNext =>
     shiftTo(zNext, buffer => if(buffer.size <= index) buffer.append(focus) else buffer.evict(zNext.index).updated(index, focus)) }
 
   def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
     shiftTo(zPrev, buffer => buffer.evict(zPrev.index).updated(index, focus)) }
+
+  private[util] def shiftTo(z: Zipper[M[A]], shift: VectorBuffer[A] => VectorBuffer[A]): M[BufferedZipper[M, A]] =
+    buffer.lift(z.index).fold(
+      z.focus.map { t => new BufferedZipper(shift(buffer), z, t)})(
+      t => point(new BufferedZipper(buffer.evict(z.index).updated(index, focus), z, t)) )
 
   def toStream: Stream[M[A]] = zipper.toStream
 
@@ -25,23 +29,21 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: VectorBuffer[A], zippe
     * than minimize traversals.
     */
   def toList: M[List[A]] = {
-    def go(bz: BufferedZipper[M, A], l: M[List[A]]): M[List[A]] = bz.next match {
-      case Some(mbz) => mbz.flatMap(go(_, l.map(bz.focus :: _)))
-      case None      => l.map(bz.focus :: _)
+    def go(z: Zipper[M[A]], l: M[List[A]]): M[List[A]] = z.next match {
+      case Some(zNext) => go(zNext, l.flatMap(list => getFromBufferOrZipper(z).map(_ :: list)))
+      case None        => l.flatMap(list => getFromBufferOrZipper(z).map(_ :: list))
     }
 
-    def goToHead(bz: BufferedZipper[M, A]): M[BufferedZipper[M,A]] = bz.prev match {
-      case Some(mbz) => mbz.flatMap(goToHead)
-      case None      => point(bz)
+    def getFromBufferOrZipper(z: Zipper[M[A]]) =
+      buffer.lift(z.index).fold(z.focus)(point(_))
+
+    def goToHead(z: Zipper[M[A]]): Zipper[M[A]] = z.previous match {
+      case Some(zPrev) => goToHead(zPrev)
+      case None        => z
     }
 
-    goToHead(this).flatMap(head => go(head, point(List())).map(_.reverse))
+    go(goToHead(zipper), point(List())).map(_.reverse)
   }
-
-  private[util] def shiftTo(z: Zipper[M[A]], shift: VectorBuffer[A] => VectorBuffer[A]): M[BufferedZipper[M, A]] =
-    buffer.lift(z.index).fold(
-      z.focus.map { t => new BufferedZipper(shift(buffer), z, t)})(
-      t => point(new BufferedZipper(buffer.evict(z.index).updated(index, focus), z, t)) )
 
 }
 
