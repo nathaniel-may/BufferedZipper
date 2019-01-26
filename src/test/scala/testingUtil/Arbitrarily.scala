@@ -43,10 +43,7 @@ object Arbitrarily {
   // minSize and maxSize must be positive and minSize must be <= maxSize
   def boundedStreamAndPathsGen[M[_]: Monad](minSize: Option[Int], maxSize: Option[Int]): Gen[StreamAndPaths[M, Int]] =
     Gen.sized { size =>
-      val adjustedSize = (for {
-        maxS <- maxSize
-        minS <- minSize
-      } yield size min maxS max minS).getOrElse(size)
+      val adjustedSize = size min maxSize.getOrElse(Int.MaxValue) max minSize.getOrElse(0)
 
       for {
         s <- Gen.listOfN(adjustedSize, arbInt.arbitrary)
@@ -57,8 +54,6 @@ object Arbitrarily {
     }
 
   implicit val aBufferSize:           Arbitrary[BufferSize]              = Arbitrary(bufferSizeGen(None, None, true))
-//  implicit val aLimitedBufferSize:    Arbitrary[LimitedBufferSize]       = Arbitrary(limitedBufferSizeGen)
-//  implicit val aNonZeroBufferSize:    Arbitrary[NonZeroBufferSize]       = Arbitrary(nonZeroBufferSizeGen)
   implicit val anIdIntStreamAndPaths: Arbitrary[StreamAndPaths[Id, Int]] = Arbitrary(streamAndPathsGen)
   implicit val anIOIntStreamAndPaths: Arbitrary[StreamAndPaths[IO, Int]] = Arbitrary(streamAndPathsGen)
 
@@ -68,6 +63,18 @@ object Arbitrarily {
       .filter(buffSize.limits.contains)
       .map(long => BufferSize(Some(long), buffSize.limits))
   }}
+
+  implicit val shrinkPath: Shrink[Path] = Shrink { path =>
+    (path.steps.filter(step => step != StationaryNext || step != StationaryPrev) #::
+      (1 until 30).toStream.map(path.steps.take))
+      .map(goHome)
+      .map(Path)
+  }
+
+  private def goHome(steps: Stream[PrevNext]): Stream[PrevNext] =
+    steps #::: Stream.fill(
+      steps.map { case Next => 1; case Prev => -1 }
+        .reduce[Int] { case (l, r) => l + r } )(Prev)
 
   private def pathGen(streamLength: Int): Gen[Path] = {
     def go(genSize: Int, len: Int, there: Gen[Stream[PrevNext]], back: Gen[Stream[PrevNext]]): Gen[Stream[PrevNext]] =
