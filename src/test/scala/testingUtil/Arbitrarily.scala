@@ -37,7 +37,7 @@ object Arbitrarily {
   }
 
   def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPaths[M, Int]] =
-    boundedStreamAndPathsGen(None, None)
+    boundedStreamAndPathsGen(None, Some(10)) // TODO hard limit on large testing
 
   // TODO can I abstract over more than Int
   // minSize and maxSize must be positive and minSize must be <= maxSize
@@ -69,6 +69,14 @@ object Arbitrarily {
       (1 until 30).toStream.map(path.steps.take))
       .map(goHome)
       .map(Path)
+  }
+
+  // TODO this is kind of a dumb shrinker
+  implicit val shrinkStreamAndPath: Shrink[StreamAndPaths[Id, Int]] = Shrink { sp =>
+    (sp.limits.fold(0)(_.min.toInt) to sp.limits.fold(sp.stream.size-1)(_.max.toInt))
+      .map(sp.stream.take)
+      .toStream
+      .map(s => StreamAndPaths(s, sp.pathGen, sp.limits))
   }
 
   private def goHome(steps: Stream[PrevNext]): Stream[PrevNext] =

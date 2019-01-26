@@ -2,7 +2,9 @@ package util
 
 // Scalacheck
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen, Properties}, Arbitrary.{arbLong, arbOption}
+import org.scalacheck.{Arbitrary, Gen, Properties, Test}
+import Arbitrary.{arbLong, arbOption}
+import org.scalacheck.Test.Parameters
 import testingUtil.Arbitrarily.boundedStreamAndPathsGen
 
 // Scala
@@ -61,20 +63,21 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
-  property("buffer limit is never exceeded when traversed once linearlly") =
-    forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-      (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
-        BufferedZipper[Id, Int](sp.stream, size.max)
-          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
-          .forall(_ <= size.max.get) }
-    }
+  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
+    implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
+    (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
+      BufferedZipper[Id, Int](sp.stream, size.max)
+        .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
+        .forall(_ <= size.max.get) }
+  }
 
   //TODO THIS IS THE ONE I WAS WORKING ON
   property("buffer is being used for streams of at least two elements") =
     forAll(boundedStreamAndPathsGen(Some(2), None), nonZeroBufferSizeGen(16)) {
+      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
       (sp: StreamAndPaths[Id, Int], nonZeroSize: BufferSize) => forAll(sp.pathGen) { path: Path =>
-        println(s"STREAM: ${sp.stream.toList}")
-        println(s"PATH  : ${path.steps.toList}")
+//        println(s"STREAM: ${sp.stream.toList}")
+//        println(s"PATH  : ${path.steps.toList}")
         BufferedZipper[Id, Int](sp.stream, nonZeroSize.max)
           .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
           .tail.forall(_ > 0) }
@@ -82,6 +85,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer is not being used for streams of one or less elements when traversed once forwards") =
     forAll(boundedStreamAndPathsGen(Some(0), Some(1)), nonZeroBufferSizeGen(16)) {
+      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
       (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
         BufferedZipper[Id, Int](sp.stream, size.max)
           .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
@@ -90,12 +94,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer never contains the focus") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
     (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
+      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
       BufferedZipper(sp.stream, size.max)
         .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), path.steps))
         .forall(_ == false) }
   }
 
   property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
+    implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
     (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
       BufferedZipper[Id, Int](sp.stream, size.max)
         .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, measureBufferContents[Id, Int], path.steps))
