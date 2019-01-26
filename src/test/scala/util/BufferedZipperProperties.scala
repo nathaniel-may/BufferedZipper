@@ -12,20 +12,12 @@ import scalaz.effect.IO
 
 // Project
 import testingUtil.BufferedZipperFunctions._
-import testingUtil.Arbitrarily.{StreamAndPaths, Path, BufferSize, LimitedBufferSize, NonZeroBufferSize}
-import testingUtil.Arbitrarily.{anIdIntStreamAndPaths, aBufferSize, aLimitedBufferSize, aNonZeroBufferSize}
+import testingUtil.Arbitrarily._
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
-//  case class StreamAndPathsAtLeast2[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path])
-//  case class UniqueStreamAndPathsAtLeast1[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path])
-
-//  implicit val aIdIntStreamAtLeast2: Arbitrary[StreamAndPathsAtLeast2[Id, Int]] =
-//    Arbitrary(boundedStreamAndPathsGen(2, Int.MaxValue).map(x => UniqueStreamAndPathsAtLeast1(x.stream, x.pathGen)))
-//
-//  implicit val aIdIntStreamAtLeast2: Arbitrary[UniqueStreamAndPathsAtLeast1] =
-//    Arbitrary(boundedUniqueStreamAndPathsGen(1, Int.MaxValue).map(x => UniqueStreamAndPathsAtLeast1(x.stream, x.pathGen)))
+  val optLongGen: Gen[Option[Long]] = arbOption[Long](arbLong).arbitrary
 
   // TODO with path so that buffer gets holes in it and focus isn't always at the head
   // TODO add test for this and effect counter. If something has been pulled into the buffer without being evicted it shouldn't do the effect again to put it into a list
@@ -55,7 +47,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   property("next then prev should result in the first element regardless of buffer limit") =
-    forAll(boundedStreamAndPathsGen(2, Int.MaxValue), arbOption[Long](arbLong).arbitrary) {
+    forAll(boundedStreamAndPathsGen(Some(2), None), optLongGen) {
       (sp: StreamAndPaths[Id, Int], max: Option[Long]) => (for {
         zipper <- BufferedZipper[Id, Int](sp.stream, max)
         next   <- zipper.next
@@ -69,53 +61,45 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
-  //TODO pathify
-  property("buffer limit is never exceeded when traversed once linearlly") = forAll {
-    (inStream: Stream[Int], size: LimitedBufferSize) =>
-      BufferedZipper[Id, Int](inStream, Some(size.max))
-        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
-        .forall(_ <= size.max)
-  }
+  property("buffer limit is never exceeded when traversed once linearlly") =
+    forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
+      (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
+        BufferedZipper[Id, Int](sp.stream, size.max)
+          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
+          .forall(_ <= size.max.get) }
+    }
 
   //TODO THIS IS THE ONE I WAS WORKING ON
   property("buffer is being used for streams of at least two elements") =
-    forAll(boundedStreamAndPathsGen(2, Int.MaxValue), aNonZeroBufferSize.arbitrary) {
-      (sp: StreamAndPaths[Id, Int], size: NonZeroBufferSize) => forAll(sp.pathGen) { path: Path =>
+    forAll(boundedStreamAndPathsGen(Some(2), None), nonZeroBufferSizeGen(16)) {
+      (sp: StreamAndPaths[Id, Int], nonZeroSize: BufferSize) => forAll(sp.pathGen) { path: Path =>
         println(s"STREAM: ${sp.stream.toList}")
         println(s"PATH  : ${path.steps.toList}")
-        BufferedZipper[Id, Int](sp.stream, size.max)
+        BufferedZipper[Id, Int](sp.stream, nonZeroSize.max)
           .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
           .tail.forall(_ > 0) }
     }
 
-  //TODO pathify
-  property("buffer is not being used for streams of one or less elements when traversed once forwards") = forAll {
-    (in: Option[Int], size: NonZeroBufferSize) =>
-      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
-        .fold[List[Long]](List())(unzipToListOfBufferSize(Forwards, _))
-        .forall(_ == 0)
+  property("buffer is not being used for streams of one or less elements when traversed once forwards") =
+    forAll(boundedStreamAndPathsGen(Some(0), Some(1)), nonZeroBufferSizeGen(16)) {
+      (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
+        BufferedZipper[Id, Int](sp.stream, size.max)
+          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
+          .forall(_ == 0) }
   }
 
-  //TODO see above^^
-  property("buffer is not being used for streams of one or less elements when traversed backwards") = forAll {
-    (in: Option[Int], size: NonZeroBufferSize) =>
-      BufferedZipper[Id, Int](in.fold[Stream[Int]](Stream())(Stream(_)), size.max)
-        .fold[List[Long]](List())(unzipToListOfBufferSize(Backwards, _))
-        .forall(_ == 0)
-  }
-
-  property("buffer never contains the focus") = forAll {
-    (sp: StreamAndPaths[Id, Int], size: NonZeroBufferSize) => forAll(sp.pathGen) { path: Path =>
+  property("buffer never contains the focus") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
+    (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
       BufferedZipper(sp.stream, size.max)
         .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), path.steps))
         .forall(_ == false) }
   }
 
-  property("buffer limit is never exceeded") = forAll {
-    (sp: StreamAndPaths[Id, Int], size: LimitedBufferSize) => forAll(sp.pathGen) { path: Path =>
-      BufferedZipper[Id, Int](sp.stream, Some(size.max))
-        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, bs => measureBufferContents(bs), path.steps))
-        .forall(_ <= size.max) }
+  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
+    (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
+      BufferedZipper[Id, Int](sp.stream, size.max)
+        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, measureBufferContents[Id, Int], path.steps))
+        .forall(_ <= size.max.get) }
   }
 
   // TODO replace var with state monad

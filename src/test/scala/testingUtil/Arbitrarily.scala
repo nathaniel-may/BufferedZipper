@@ -1,6 +1,7 @@
 package testingUtil
 
-import org.scalacheck.{Arbitrary, Gen}, Arbitrary.{arbInt, arbBool}
+import org.scalacheck.{Arbitrary, Gen, Shrink}
+import Arbitrary.{arbBool, arbInt}
 import scalaz.Monad
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
@@ -15,39 +16,58 @@ object Arbitrarily {
   object StationaryNext extends N { override def toString: String = "StationaryNext" }
   object StationaryPrev extends P { override def toString: String = "StationaryPrev" }
 
-  case class BufferSize(max: Option[Long])
-  case class LimitedBufferSize(max: Long)
-  case class NonZeroBufferSize(max: Option[Long])
-  case class StreamAndPaths[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path])
+  case class BufferSize(max: Option[Long], limits: Option[MinMax])
+  case class StreamAndPaths[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path], limits: Option[MinMax])
   case class Path(steps: Stream[PrevNext])
+  case class MinMax(min: Long, max: Long) {
+    def contains(i: Long): Boolean = i >= min && i <= max
+  }
 
-  val bufferSizeGen: Gen[BufferSize] = Gen.sized { size =>
-    BufferSize(if (size <= 0) None else if(size == 1) Some(Long.MaxValue) else Some(16 * (size - 2))) }
+  def nonZeroBufferSizeGen(min: Long): Gen[BufferSize] = bufferSizeGen(Some(min), None, noneOk = false)
 
-  val limitedBufferSizeGen: Gen[LimitedBufferSize] = Gen.sized { size =>
-    LimitedBufferSize(if (size <= 0) Long.MaxValue else 16 * (size - 1)) }
-
-  val nonZeroBufferSizeGen: Gen[NonZeroBufferSize] = Gen.sized { size =>
-    NonZeroBufferSize(if (size <= 0) None else if(size == 1) Some(Long.MaxValue) else Some(16 * (size - 1))) }
+  def bufferSizeGen(min: Option[Long], max: Option[Long], noneOk: Boolean): Gen[BufferSize] = Gen.sized { size =>
+    val minn: Long = min.getOrElse(0L)
+    val maxx: Long = max.getOrElse(Int.MaxValue.toLong)
+    BufferSize(
+      if      (size <= 0 && noneOk)  None
+      else if (size <= 0 && !noneOk) Some(maxx)
+      else if (size == 1)            Some(maxx)
+      else                           Some(minn + 16L * (size.toLong - 2L)),
+      minMax(min, max))
+  }
 
   def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPaths[M, Int]] =
-    boundedStreamAndPathsGen(Int.MinValue, Int.MaxValue)
+    boundedStreamAndPathsGen(None, None)
 
   // TODO can I abstract over more than Int
   // minSize and maxSize must be positive and minSize must be <= maxSize
-  def boundedStreamAndPathsGen[M[_]: Monad](minSize: Int, maxSize: Int): Gen[StreamAndPaths[M, Int]] =
+  def boundedStreamAndPathsGen[M[_]: Monad](minSize: Option[Int], maxSize: Option[Int]): Gen[StreamAndPaths[M, Int]] =
     Gen.sized { size =>
-      val adjustedSize = size min maxSize max minSize
+      val adjustedSize = (for {
+        maxS <- maxSize
+        minS <- minSize
+      } yield size min maxS max minS).getOrElse(size)
+
       for {
         s <- Gen.listOfN(adjustedSize, arbInt.arbitrary)
-      } yield StreamAndPaths[M, Int](s.map(implicitly[Monad[M]].point(_)).toStream, pathGen(adjustedSize))
+      } yield StreamAndPaths[M, Int](
+        s.map(implicitly[Monad[M]].point(_)).toStream,
+        pathGen(adjustedSize),
+        minMax(maxSize.map(_.toLong), minSize.map(_.toLong)))
     }
 
-  implicit val aBufferSize:           Arbitrary[BufferSize]              = Arbitrary(bufferSizeGen)
-  implicit val aLimitedBufferSize:    Arbitrary[LimitedBufferSize]       = Arbitrary(limitedBufferSizeGen)
-  implicit val aNonZeroBufferSize:    Arbitrary[NonZeroBufferSize]       = Arbitrary(nonZeroBufferSizeGen)
+  implicit val aBufferSize:           Arbitrary[BufferSize]              = Arbitrary(bufferSizeGen(None, None, true))
+//  implicit val aLimitedBufferSize:    Arbitrary[LimitedBufferSize]       = Arbitrary(limitedBufferSizeGen)
+//  implicit val aNonZeroBufferSize:    Arbitrary[NonZeroBufferSize]       = Arbitrary(nonZeroBufferSizeGen)
   implicit val anIdIntStreamAndPaths: Arbitrary[StreamAndPaths[Id, Int]] = Arbitrary(streamAndPathsGen)
   implicit val anIOIntStreamAndPaths: Arbitrary[StreamAndPaths[IO, Int]] = Arbitrary(streamAndPathsGen)
+
+  implicit val shrinkBufferSize: Shrink[BufferSize] = Shrink { buffSize => buffSize.max match {
+    case None       => Stream()
+    case Some(size) => Stream(0, 16, size/2, size-16)
+      .filter(buffSize.limits.contains)
+      .map(long => BufferSize(Some(long), buffSize.limits))
+  }}
 
   private def pathGen(streamLength: Int): Gen[Path] = {
     def go(genSize: Int, len: Int, there: Gen[Stream[PrevNext]], back: Gen[Stream[PrevNext]]): Gen[Stream[PrevNext]] =
@@ -86,5 +106,12 @@ object Arbitrarily {
   }
 
   private val prevNextGen: Gen[PrevNext] = arbBool.arbitrary.map(b => if(b) Next else Prev)
+
+  private def minMax(min: Option[Long], max: Option[Long]) = (max, min) match {
+    case (None, None)             => None
+    case (None, Some(max_))       => Some(MinMax(0,    max_))
+    case (Some(min_), None)       => Some(MinMax(min_, Int.MaxValue.toLong))
+    case (Some(min_), Some(max_)) => Some(MinMax(min_, max_))
+  }
 
 }
