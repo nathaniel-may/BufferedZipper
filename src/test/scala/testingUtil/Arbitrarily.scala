@@ -21,32 +21,42 @@ object Arbitrarily {
   object StationaryPrev extends P with Stationary { override def toString: String = "StationaryPrev" }
 
   case class BufferSize(max: Option[Long], limits: Option[MinMax])
-  case class StreamAndPaths[M[_]: Monad, A](stream: Stream[M[A]], pathGen: Gen[Path], limits: Option[MinMax])
+  case class StreamAndPath[M[_]: Monad, A](stream: Stream[M[A]], path: Path, limits: Option[MinMax])
   case class MinMax(min: Long, max: Long) {
     def contains(i: Long): Boolean = i >= min && i <= max
   }
-  case class Path (zipperSize: Int, loops: Vector[Stream[Stationary]]) {
+  case class Path private (zipperSize: Int, loopsThere: Stream[Stream[PrevNext]], loopsBack: Stream[Stream[PrevNext]]) {
     val steps: Stream[PrevNext] =
-      unfold[(Int, Stream[PrevNext]), PrevNext]((0, Next #:: loops.lift(0).fold[Stream[PrevNext]](Stream())(_.map(Path.toPrevNext)))){
-        case (moved, Empty)   if moved < zipperSize - 1      => Some((Next, (moved + 1, loops.lift(moved + 1).fold[Stream[PrevNext]](Stream())(_.map(Path.toPrevNext)))))
-        case (moved, Empty)                                  => Some((Prev, (moved + 1, loops.lift(moved + 1).fold[Stream[PrevNext]](Stream())(_.map(Path.toPrevNext)))))
-        case (moved, h #:: t)                                => Some((h, (moved, t) ))
-        case (moved, _)       if moved >= zipperSize * 2 - 1 => None
-      }
+      unfold[(PrevNext, Stream[Stream[PrevNext]]), Stream[PrevNext]]((Next, loopsThere)){
+        case (Next, loop #:: loops) => Some((loop #::: Stream(Next), (Next, loops)))
+        case (Next, loop #:: Empty) => Some((loop #::: Stream(Prev), (Prev, loopsBack)))
+        case (Prev, loop #:: loops) => Some((loop #::: Stream(Prev), (Prev, loops)))
+        case (Prev, Empty)          => None
+      }.flatten // TODO ruins the point of unfold here
 
-    def appendLoop(loop: Stream[Stationary]): Option[Path] =
-      if (loops.size == zipperSize) None
-      else if (Path.isValidLoop(loops.size + 1, zipperSize, loop))
-        Some(Path(zipperSize, loops :+ loop))
+    def appendLoop(loop: Stream[Stationary]): Option[Path] = {
+      val mappedLoop = loop.map(Path.toPrevNext)
+      if (loopsThere.size < zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
+        Some(Path(zipperSize, loopsThere #::: Stream(mappedLoop), loopsBack))
+      else if (loopsThere.size == zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
+        Some(new Path(zipperSize, loopsThere, Stream(mappedLoop)))
+      else if (loopsThere.size > zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
+        Some(new Path(zipperSize, loopsThere, loopsBack #::: Stream(mappedLoop)))
       else None
+    }
 
     def removeLoop(index: Int): Path = Path(zipperSize, loops.updated(index, Stream()))
     def keepOneLoop(index: Int): Path = Path(zipperSize, loops.map(_ => Stream()).updated(index, loops.lift(index).getOrElse(Stream())))
     def removeAllLoops: Path = Path(zipperSize, Vector())
   }
   object Path {
-    def apply(zipperSize: Int): Path = Path(zipperSize, Vector())
-    def isValidLoop(index: Int, size: Int, loop: Stream[Stationary]): Boolean = ???
+    def apply(zipperSize: Int): Path = Path(zipperSize, Stream(), Stream())
+    def isValidLoop(index: Int, size: Int, loop: Stream[Stationary]): Boolean =
+      loop.foldLeft((index, index, index)){
+        case ((minn, maxx, i), StationaryNext) => (minn min i+1, maxx max i+1, i+1)
+        case ((minn, maxx, i), StationaryPrev) => (minn min i-1, maxx max i-1, i-1)
+        case (_, _) => (-1, size, 0) //TODO can't tell the match is exhaustive even though it is.
+      } match { case (min, max, _) => min > 0 && max < size }
     private def toPrevNext(np: Stationary): PrevNext = np match {
       case _: N => StationaryNext
       case _: P => StationaryPrev
@@ -66,26 +76,27 @@ object Arbitrarily {
       minMax(min, max))
   }
 
-  def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPaths[M, Int]] =
+  def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPath[M, Int]] =
     boundedStreamAndPathsGen(None, Some(10)) // TODO hard limit on large testing
 
   // TODO can I abstract over more than Int
   // minSize and maxSize must be positive and minSize must be <= maxSize
-  def boundedStreamAndPathsGen[M[_]: Monad](minSize: Option[Int], maxSize: Option[Int]): Gen[StreamAndPaths[M, Int]] =
+  def boundedStreamAndPathsGen[M[_]: Monad](minSize: Option[Int], maxSize: Option[Int]): Gen[StreamAndPath[M, Int]] =
     Gen.sized { size =>
       val adjustedSize = size min maxSize.getOrElse(Int.MaxValue) max minSize.getOrElse(0)
-
-      for {
-        s <- Gen.listOfN(adjustedSize, arbInt.arbitrary)
-      } yield StreamAndPaths[M, Int](
-        s.map(implicitly[Monad[M]].point(_)).toStream,
-        pathGen(adjustedSize),
-        minMax(maxSize.map(_.toLong), minSize.map(_.toLong)))
+      pathGen(adjustedSize).flatMap { path =>
+        for {
+          s <- Gen.listOfN(adjustedSize, arbInt.arbitrary)
+        } yield StreamAndPath[M, Int](
+          s.map(implicitly[Monad[M]].point(_)).toStream,
+          path,
+          minMax(maxSize.map(_.toLong), minSize.map(_.toLong)))
+      }
     }
 
   implicit val aBufferSize:           Arbitrary[BufferSize]              = Arbitrary(bufferSizeGen(None, None, true))
-  implicit val anIdIntStreamAndPaths: Arbitrary[StreamAndPaths[Id, Int]] = Arbitrary(streamAndPathsGen)
-  implicit val anIOIntStreamAndPaths: Arbitrary[StreamAndPaths[IO, Int]] = Arbitrary(streamAndPathsGen)
+  implicit val anIdIntStreamAndPaths: Arbitrary[StreamAndPath[Id, Int]] = Arbitrary(streamAndPathsGen)
+  implicit val anIOIntStreamAndPaths: Arbitrary[StreamAndPath[IO, Int]] = Arbitrary(streamAndPathsGen)
 
   implicit val shrinkBufferSize: Shrink[BufferSize] = Shrink { buffSize => buffSize.max match {
     case None       => Stream()
@@ -99,28 +110,24 @@ object Arbitrarily {
   }
 
   // TODO this is kind of a dumb shrinker
-  implicit val shrinkStreamAndPath: Shrink[StreamAndPaths[Id, Int]] = Shrink { sp =>
+  implicit val shrinkStreamAndPath: Shrink[StreamAndPath[Id, Int]] = Shrink { sp =>
     (sp.limits.fold(0)(_.min.toInt) to sp.limits.fold(sp.stream.size-1)(_.max.toInt))
       .map(sp.stream.take)
       .toStream
-      .map(s => StreamAndPaths(s, sp.pathGen, sp.limits))
+      .map(s => StreamAndPath(s, sp.path, sp.limits))
   }
-
-  private def goHome(steps: Stream[PrevNext]): Stream[PrevNext] =
-    steps #::: Stream.fill(
-      steps.map { case Next => 1; case Prev => -1 }
-        .reduce[Int] { case (l, r) => l + r } )(Prev)
 
   private def pathGen(streamLength: Int): Gen[Path] = {
     def go(genSize: Int, z: Zipper[Unit], dir: PrevNext, path: Gen[Path]): Gen[Path] = {
       val newPath = for {
         p <- path
         s <- stationaryPath(genSize, z.lefts.size, z.rights.size)
-      } yield p.appendLoop(s).getOrElse(throw new Exception("Generated a bad stationary loop"))
+      } yield p.appendLoop(s).getOrElse(
+        throw new Exception(s"Too many loops or generated a bad stationary loop:\n leftSize : ${z.lefts.size}\n rightSize: ${z.rights.size}\n loopsSize: ${p.loops.size}\n zSize    : ${p.zipperSize}\n loop: ${s.toList}"))
 
       dir match {
         case _: N => z.next.fold(go(genSize, z.previous.get, Prev, newPath))(zNext => go(genSize, zNext, Next, newPath))
-        case _: P => z.next.fold(path)(zNext => go(genSize, zNext, Next, newPath))
+        case _: P => z.previous.fold(path)(zNext => go(genSize, zNext, Next, newPath))
       }
     }
 
