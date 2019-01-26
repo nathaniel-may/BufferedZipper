@@ -89,13 +89,13 @@ object Arbitrarily {
 
   implicit val shrinkBufferSize: Shrink[BufferSize] = Shrink { buffSize => buffSize.max match {
     case None       => Stream()
-    case Some(size) => Stream(0, 16, size/2, size-16)
+    case Some(size) => Stream(0, 16, size/2, size-16).filter(_ != size)
       .filter(buffSize.limits.contains)
       .map(long => BufferSize(Some(long), buffSize.limits))
   }}
 
   implicit val shrinkPath: Shrink[Path] = Shrink { path =>
-    path.removeAllLoops #:: (0 to path.zipperSize).toStream.map(path.keepOneLoop)
+    path.removeAllLoops #:: path.loops.indices.toStream.map(path.keepOneLoop)
   }
 
   // TODO this is kind of a dumb shrinker
