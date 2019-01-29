@@ -12,7 +12,7 @@ import scala.Stream.Empty
 object Arbitrarily {
 
   trait PrevNext
-  trait Stationary
+  trait Stationary extends PrevNext
   trait N extends PrevNext
   trait P extends PrevNext
   object Next extends N { override def toString: String = "Next" }
@@ -35,7 +35,7 @@ object Arbitrarily {
       }.flatten // TODO ruins the point of unfold here
 
     def appendLoop(loop: Stream[Stationary]): Option[Path] = {
-      val mappedLoop = loop.map(Path.toPrevNext)
+      val mappedLoop = loop
       if (loopsThere.size < zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
         Some(Path(zipperSize, loopsThere #::: Stream(mappedLoop), loopsBack))
       else if (loopsThere.size == zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
@@ -57,10 +57,6 @@ object Arbitrarily {
         case ((minn, maxx, i), StationaryPrev) => (minn min i-1, maxx max i-1, i-1)
         case (_, _) => (-1, size, 0) //TODO can't tell the match is exhaustive even though it is.
       } match { case (min, max, _) => min > 0 && max < size }
-    private def toPrevNext(np: Stationary): PrevNext = np match {
-      case _: N => StationaryNext
-      case _: P => StationaryPrev
-    }
   }
 
   def nonZeroBufferSizeGen(min: Long): Gen[BufferSize] = bufferSizeGen(Some(min), None, noneOk = false)
