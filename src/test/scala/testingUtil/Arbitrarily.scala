@@ -5,7 +5,6 @@ import Arbitrary.{arbBool, arbInt}
 import scalaz.{Monad, Zipper}
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
-import scalaz.Scalaz.unfold
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import scala.Stream.Empty
 
@@ -25,38 +24,30 @@ object Arbitrarily {
   case class MinMax(min: Long, max: Long) {
     def contains(i: Long): Boolean = i >= min && i <= max
   }
-  case class Path private (zipperSize: Int, loopsThere: Stream[Stream[PrevNext]], loopsBack: Stream[Stream[PrevNext]]) {
-    val steps: Stream[PrevNext] =
-      unfold[(PrevNext, Stream[Stream[PrevNext]]), Stream[PrevNext]]((Next, loopsThere)){
-        case (Next, loop #:: loops) => Some((loop #::: Stream(Next), (Next, loops)))
-        case (Next, loop #:: Empty) => Some((loop #::: Stream(Prev), (Prev, loopsBack)))
-        case (Prev, loop #:: loops) => Some((loop #::: Stream(Prev), (Prev, loops)))
-        case (Prev, Empty)          => None
-      }.flatten // TODO ruins the point of unfold here
+  case class Loop(steps: Stream[Stationary])
+  case object Loop { val empty: Loop = new Loop(Stream()) }
+  case class Path private (endAndBack: Stream[PrevNext], ls: Vector[Loop]) {
+    val steps: Stream[PrevNext] = {
+      def go(eab: Stream[PrevNext], loopStream: Stream[Loop], acc: Stream[PrevNext]): Stream[PrevNext] = (eab, loopStream) match {
+        case (Empty, _)                   => acc
+        case (pn #:: pns, Empty)          => go(pns, Empty, pn #:: acc)
+        case (pn #:: pns, loop #:: loops) => go(pns, loops, pn #:: loop.steps #::: acc)
+      }
 
-    def appendLoop(loop: Stream[Stationary]): Option[Path] = {
-      val mappedLoop = loop
-      if (loopsThere.size < zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
-        Some(Path(zipperSize, loopsThere #::: Stream(mappedLoop), loopsBack))
-      else if (loopsThere.size == zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
-        Some(new Path(zipperSize, loopsThere, Stream(mappedLoop)))
-      else if (loopsThere.size > zipperSize && Path.isValidLoop(loopsThere.size, zipperSize, loop))
-        Some(new Path(zipperSize, loopsThere, loopsBack #::: Stream(mappedLoop)))
-      else None
+      go(endAndBack.reverse, ls.toStream.reverse, Stream())
     }
 
-    def removeLoop(index: Int): Path = Path(zipperSize, loops.updated(index, Stream()))
-    def keepOneLoop(index: Int): Path = Path(zipperSize, loops.map(_ => Stream()).updated(index, loops.lift(index).getOrElse(Stream())))
-    def removeAllLoops: Path = Path(zipperSize, Vector())
+    def removeLoop(index: Int):  Path = Path(endAndBack, ls.updated(index, Loop.empty))
+    def keepOneLoop(index: Int): Path = Path(endAndBack, ls.map(_ => Loop.empty).updated(index, ls.lift(index).getOrElse(Loop.empty)))
+    def removeAllLoops: Path = Path(endAndBack, ls.map(_ => Loop.empty))
   }
   object Path {
-    def apply(zipperSize: Int): Path = Path(zipperSize, Stream(), Stream())
-    def isValidLoop(index: Int, size: Int, loop: Stream[Stationary]): Boolean =
-      loop.foldLeft((index, index, index)){
-        case ((minn, maxx, i), StationaryNext) => (minn min i+1, maxx max i+1, i+1)
-        case ((minn, maxx, i), StationaryPrev) => (minn min i-1, maxx max i-1, i-1)
-        case (_, _) => (-1, size, 0) //TODO can't tell the match is exhaustive even though it is.
-      } match { case (min, max, _) => min > 0 && max < size }
+    def apply(loops: Vector[Loop]): Path = {
+      val evenLoops = if (loops.size % 2 == 0) loops else loops :+ Loop(Stream())
+      new Path(
+        Stream.fill(evenLoops.size/2)(Next) #::: Stream.fill(evenLoops.size/2)(Prev),
+        loops)
+    }
   }
 
   def nonZeroBufferSizeGen(min: Long): Gen[BufferSize] = bufferSizeGen(Some(min), None, noneOk = false)
@@ -116,8 +107,8 @@ object Arbitrarily {
   private def pathGen(streamLength: Int): Gen[Path] = {
     def go(genSize: Int, z: Zipper[Unit], dir: PrevNext, path: Gen[Path]): Gen[Path] = {
       val newPath = for {
+        s <- loopGen(z)
         p <- path
-        s <- stationaryPath(genSize, z.lefts.size, z.rights.size)
       } yield p.appendLoop(s).getOrElse(
         throw new Exception(s"Too many loops or generated a bad stationary loop:\n leftSize : ${z.lefts.size}\n rightSize: ${z.rights.size}\n loopsSize: ${p.loops.size}\n zSize    : ${p.zipperSize}\n loop: ${s.toList}"))
 
@@ -131,27 +122,21 @@ object Arbitrarily {
   }
 
   // subset problem for generating a set of balanced parens
-  //TODO is this tail recursive with the lazy vals?
-  //TODO should I choose a size somewhere between 0 and genSize instead of them always being huge?
-  private def stationaryPath(genSize: Int, lBound: Int, rBound: Int): Gen[Stream[Stationary]] = {
-    def go(layer: Int, prev: Int, next: Int, lb: Int, rb: Int, path: Gen[Stream[Stationary]]): Gen[Stream[Stationary]] = {
-      lazy val addNext = go(layer - 1, prev,     next + 1, lb + 1, rb - 1, path.map(StationaryNext #:: _))
-      lazy val addPrev = go(layer - 1, prev + 1, next,     lb - 1, rb + 1, path.map(StationaryPrev #:: _))
+  private def loopGen(zip: Zipper[Unit]): Gen[Loop] = Gen.sized { size =>
+    def go(homeDist: Int, remaining: Int, acc: Gen[Stream[Stationary]]): Gen[Stream[Stationary]] =
+      if (remaining <= homeDist && homeDist >= 0) acc.map(Stream.fill(homeDist)(StationaryPrev) #::: _)
+      else if(remaining <= homeDist && homeDist <= 0) acc.map(Stream.fill(homeDist)(StationaryNext) #::: _)
+      else for {
+        stream  <- acc
+        snp     <- Gen.pick(1, List(StationaryPrev, StationaryNext))
+        np      <- snp.head
+        (validNp, dist) = np match {
+                            case _: N => (zip.next.fold[Stationary](StationaryPrev)(_ => StationaryNext), 1)
+                            case _: P => (zip.previous.fold[Stationary](StationaryNext)(_ => StationaryPrev), -1)
+                          }
+      } yield go(homeDist + dist, remaining-1, validNp #:: stream)
 
-      if (layer <= 0 || (lb <= 0 && rb <= 0)) path
-      else if (lb <= 0) addNext
-      else if (rb <= 0) addPrev
-      else if (prev - next >= layer) addNext
-      else if (next - prev >= layer) addPrev
-      else prevNextGen.flatMap {
-        case Next => addNext
-        case Prev => addPrev
-      }
-    }
-
-    // chooses a stationary path somewhere below the max so that these paths aren't strictly exponential in size
-    Gen.choose(0, genSize).flatMap { pathSize =>
-      go(pathSize*2, 0, 0, lBound, rBound, Stream()) }
+    go(0, size, Gen.const(Stream())).map(steps => Loop(steps.reverse))
   }
 
   private val prevNextGen: Gen[PrevNext] = arbBool.arbitrary.map(b => if(b) Next else Prev)
