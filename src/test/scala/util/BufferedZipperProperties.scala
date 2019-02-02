@@ -19,8 +19,6 @@ import testingUtil.Arbitrarily._
 //TODO add test for buffer eviction in the correct direction ....idk how.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
-  val optLongGen: Gen[Option[Long]] = arbOption[Long](arbLong).arbitrary
-
   // TODO with path so that buffer gets holes in it and focus isn't always at the head
   // TODO add test for this and effect counter. If something has been pulled into the buffer without being evicted it shouldn't do the effect again to put it into a list
   property("to List returns the same as streamInput.toList") = forAll {
@@ -49,17 +47,17 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   property("next then prev should result in the first element regardless of buffer limit") =
-    forAll(boundedStreamAndPathsGen(Some(2), None), optLongGen) {
-      (sp: StreamAndPath[Id, Int], max: Option[Long]) => (for {
-        zipper <- BufferedZipper[Id, Int](sp.stream, max)
+    forAll(boundedStreamAndPathsGen(Some(2), None), aBufferSize.arbitrary) {
+      (sp: StreamAndPath[Id, Int], size: BufferSize) => (for {
+        zipper <- BufferedZipper[Id, Int](sp.stream, size.max)
         next   <- zipper.next
         prev   <- next.prev
       } yield prev.focus) == sp.stream.headOption
     }
 
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
-    (inStream: Stream[Int], max: Option[Long]) =>
-      BufferedZipper[Id, Int](inStream, max)
+    (inStream: Stream[Int], size: BufferSize) =>
+      BufferedZipper[Id, Int](inStream, size.max)
         .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
@@ -97,7 +95,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       BufferedZipper(sp.stream, size.max)
         .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), sp.path.steps))
         .forall(_ == false)
-  }
+  }(implicitly, implicitly, implicitly, explain[BufferSize], implicitly) //TODO remove this line
 
   property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
     implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
