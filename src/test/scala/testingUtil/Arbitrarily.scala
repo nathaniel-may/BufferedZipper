@@ -53,8 +53,17 @@ object Arbitrarily {
   case class MinMax(min: Long, max: Long) {
     def contains(i: Long): Boolean = i >= min && i <= max
   }
-  case class Loop(steps: Stream[Stationary])
-  case object Loop { val empty: Loop = Loop(Stream()) }
+  case class Loop private (steps: Stream[Stationary])
+  case object Loop {
+    def apply(steps: Stream[Stationary]): Option[Loop] =
+      if (steps.foldLeft(0){
+        case (i, StationaryNext) => i+1
+        case (i, StationaryPrev) => i-1
+        case (i, _) => i
+      } != 0) None else Some(new Loop(steps))
+
+    val empty: Loop = Loop(Stream()).get
+  }
   case class Path private (endAndBack: Stream[PrevNext], ls: Vector[Loop]) {
     val steps: Stream[PrevNext] = {
       def go(eab: Stream[PrevNext], loopStream: Stream[Loop], acc: Stream[PrevNext]): Stream[PrevNext] = (eab, loopStream) match {
@@ -69,6 +78,10 @@ object Arbitrarily {
     def removeLoop(index: Int):  Path = Path(endAndBack, ls.updated(index, Loop.empty))
     def keepOneLoop(index: Int): Path = Path(endAndBack, ls.map(_ => Loop.empty).updated(index, ls.lift(index).getOrElse(Loop.empty)))
     def removeAllLoops: Path = Path(endAndBack, ls.map(_ => Loop.empty))
+    lazy val loopsAndPositions: Vector[(Loop, Int)] = ls.zipWithIndex
+      .map { case (loop, index) =>
+        if(index < ls.size) (loop, index)
+        else (loop, index - (index - ls.size))}
   }
   object Path {
     def apply(loops: Vector[Loop]): Path = {
@@ -129,16 +142,27 @@ object Arbitrarily {
     path.removeAllLoops #:: path.ls.indices.toStream.map(path.keepOneLoop)
   }
 
-  // TODO this is kind of a dumb shrinker
-  implicit val shrinkStreamAndPath: Shrink[StreamAndPath[Id, Int]] = Shrink { sp =>
-    println(s"shrinking stream and path: $sp")
-    val x = (sp.limits.fold(0)(_.min.toInt) to sp.limits.fold(sp.stream.size-1)(_.max.toInt))
-      .map(sp.stream.take)
-      .toStream
-      .map(s => StreamAndPath(s, sp.path, sp.limits))
-      .filter(spShrunk => spShrunk.stream != sp.stream || spShrunk.path != spShrunk.path)
-    println(s"shrunk options: ${x.toList}")
-    x
+  //shrinks the path, then the stream
+  implicit val shrinkStreamAndPath: Shrink[StreamAndPath[Id, Int]] = Shrink[StreamAndPath[Id, Int]] { sp =>
+    println(s"shrinking: $sp")
+    val shrunkPaths: Stream[StreamAndPath[Id, Int]] = sp.path.ls.indices.map(sp.path.keepOneLoop).toStream.append(Stream(sp.path.removeAllLoops))
+      .map(p => StreamAndPath[Id, Int](sp.stream, p, sp.limits))
+
+    val shrunkStreams: Stream[StreamAndPath[Id, Int]] = sp.stream.indices.reverse.toStream
+      .map {
+        i => (sp.stream.take(i), sp.path.loopsAndPositions.map {
+          case (loop, index) => Stream.fill(i)(()).toZipper.fold(Loop.empty)(z => shrinkLoopToBounds(loop, zipRight(z, index))) }) }
+        .map { case (s, loops) => StreamAndPath[Id, Int](s, Path(loops), sp.limits) }
+
+    val shrunkStreamsLessLoops: Stream[StreamAndPath[Id, Int]] =
+      shrunkStreams.flatMap { shrunkSp =>
+        shrunkSp.path.ls.indices.toStream.map(shrunkSp.path.keepOneLoop)
+          .append(Stream(shrunkSp.path.removeAllLoops))
+          .map(p => StreamAndPath[Id, Int](sp.stream, p, sp.limits)) }
+
+    shrunkPaths #::: shrunkStreams #::: shrunkStreamsLessLoops
+      .filter(shrunkSp => sp.limits.fold(true)(limit => shrunkSp.stream.size >= limit.min && shrunkSp.stream.size <= limit.max))
+      .filter(shrunkSp => shrunkSp.stream != sp.stream || shrunkSp.path != sp.path) //TODO this is a hack
   }
 
   private def pathGen(streamLength: Int): Gen[Path] = Gen.sized { size => // TODO size never forwarded to loop
@@ -170,7 +194,41 @@ object Arbitrarily {
         recurse <- go(homeDist + dist, remaining-1, Gen.const(validNp #:: stream))
       } yield recurse
 
-    go(0, size, Gen.const(Stream())).map(steps => Loop(steps.reverse))
+    go(0, size, Gen.const(Stream())).map(steps => Loop(steps.reverse).get)
+  }
+
+  private def shrinkLoopToBounds(l: Loop, zip: Zipper[Unit]): Loop = {
+    def go(steps: Stream[Stationary], z: Zipper[Unit], acc: Stream[Stationary]): Stream[Stationary] = {
+      steps match {
+        case Empty                  => acc
+        case StationaryNext #:: nps => z.next match {
+          case None          => go(dropNext(nps, StationaryPrev).getOrElse(dropNext(acc, StationaryPrev).get), z, acc)
+          case Some(nextZip) => go(nps, nextZip, StationaryNext #:: acc)
+        }
+        case StationaryPrev #:: nps => z.previous match {
+          case None          => go(dropNext(nps, StationaryNext).getOrElse(dropNext(nps, StationaryNext).get), z, acc)
+          case Some(prevZip) => go(nps, prevZip, StationaryPrev #:: acc)
+        }
+      }
+
+    }
+
+    def dropNext[A](s: Stream[A], toDrop: A): Option[Stream[A]] = {
+      def go(zip: Zipper[A]): Option[Stream[A]] = zip.next match {
+        case None => None
+        case Some(nZip) if nZip.focus == toDrop => Some(zip.lefts #::: zip.rights)
+        case Some(nZip) => go(nZip)
+      }
+
+      s.toZipper.fold[Option[Stream[A]]](None)(go)
+    }
+
+    Loop(go(l.steps, zip, Stream()).reverse).get
+  }
+
+  private def zipRight[A](zip: Zipper[A], i: Int): Zipper[A] = {
+    if (i == 0) zip
+    else zipRight(zip.next.get, i-1) // TODO this is kind of messy
   }
 
   private val stationaryGen: Gen[Stationary] = arbBool.arbitrary.map(b => if(b) StationaryNext else StationaryPrev)
@@ -180,16 +238,6 @@ object Arbitrarily {
     case (None, Some(max_))       => Some(MinMax(0,    max_))
     case (Some(min_), None)       => Some(MinMax(min_, Int.MaxValue.toLong))
     case (Some(min_), Some(max_)) => Some(MinMax(min_, max_))
-  }
-
-  //TODO remove explainer
-  def explain[T: Shrink] = Shrink[T] { input =>
-    println(s"input to shrink: $input")
-    val wrappedShrinker = implicitly[Shrink[T]]
-    val shrunkValues = wrappedShrinker.shrink(input)
-    //this eagerly evaluates the Stream of values. It could blow up on very large Streams or expensive computations.
-    println(s"shrunk values: ${shrunkValues.mkString(",")}")
-    shrunkValues
   }
 
 }
