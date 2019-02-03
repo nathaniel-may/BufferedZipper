@@ -6,19 +6,11 @@ import scalaz.{Monad, Zipper}
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
-
 import scala.Stream.Empty
 
-object Arbitrarily {
+import Directions._
 
-  trait PrevNext
-  trait Stationary extends PrevNext
-  trait N extends PrevNext
-  trait P extends PrevNext
-  object Next extends N { override def toString: String = "Next" }
-  object Prev extends P { override def toString: String = "Prev" }
-  object StationaryNext extends N with Stationary { override def toString: String = "StationaryNext" }
-  object StationaryPrev extends P with Stationary { override def toString: String = "StationaryPrev" }
+object Arbitrarily {
 
   trait BufferSize { val cap: Long }
 
@@ -52,46 +44,6 @@ object Arbitrarily {
   case class StreamAndPath[M[_]: Monad, A](stream: Stream[M[A]], path: Path, limits: Option[MinMax])
   case class MinMax(min: Long, max: Long) {
     def contains(i: Long): Boolean = i >= min && i <= max
-  }
-  case class Loop private (steps: Stream[Stationary])
-  case object Loop {
-    def apply(steps: Stream[Stationary]): Option[Loop] =
-      if (steps.foldLeft(0){
-        case (i, StationaryNext) => i+1
-        case (i, StationaryPrev) => i-1
-        case (i, _) => i
-      } != 0) None else Some(new Loop(steps))
-
-    val empty: Loop = Loop(Stream()).get
-  }
-  case class Path private (endAndBack: Stream[PrevNext], ls: Vector[Loop]) {
-    val steps: Stream[PrevNext] = {
-      def go(eab: Stream[PrevNext], loopStream: Stream[Loop], acc: Stream[PrevNext]): Stream[PrevNext] = (eab, loopStream) match {
-        case (Empty, _)                   => acc
-        case (pn #:: pns, Empty)          => go(pns, Empty, pn #:: acc)
-        case (pn #:: pns, loop #:: loops) => go(pns, loops, pn #:: loop.steps #::: acc)
-      }
-
-      go(endAndBack.reverse, ls.toStream.reverse, Stream())
-    }
-
-    def removeLoop(index: Int):  Path = Path(endAndBack, ls.updated(index, Loop.empty))
-    def keepOneLoop(index: Int): Path = Path(endAndBack, ls.map(_ => Loop.empty).updated(index, ls.lift(index).getOrElse(Loop.empty)))
-    def removeAllLoops: Path = Path(endAndBack, ls.map(_ => Loop.empty))
-    lazy val loopsAndPositions: Vector[(Loop, Int)] = ls.zipWithIndex
-      .map { case (loop, index) =>
-        if(index < ls.size) (loop, index)
-        else (loop, index - (index - ls.size))}
-  }
-  object Path {
-    def apply(loops: Vector[Loop]): Path = {
-      val evenLoops = if (loops.size % 2 == 0) loops else loops :+ Loop.empty
-      new Path(
-        Stream.fill(evenLoops.size/2)(Next) #::: Stream.fill(evenLoops.size/2)(Prev),
-        loops)
-    }
-
-    val empty = Path(Vector(Loop.empty))
   }
 
   val finiteIntStreamGen: Gen[Stream[Int]] = Gen.sized { size =>
@@ -151,7 +103,7 @@ object Arbitrarily {
     val shrunkStreams: Stream[StreamAndPath[Id, Int]] = sp.stream.indices.reverse.toStream
       .map {
         i => (sp.stream.take(i), sp.path.loopsAndPositions.map {
-          case (loop, index) => Stream.fill(i)(()).toZipper.fold(Loop.empty)(z => shrinkLoopToBounds(loop, zipRight(z, index))) }) }
+          case (loop, index) => Stream.fill(i)(()).toZipper.fold(Loop.empty)(z => shrinkLoopToDepth(loop, zipRight(z, index))) }) }
         .map { case (s, loops) => StreamAndPath[Id, Int](s, Path(loops), sp.limits) }
 
     val shrunkStreamsLessLoops: Stream[StreamAndPath[Id, Int]] =
@@ -178,7 +130,6 @@ object Arbitrarily {
     } yield Path(there.reverse ++ back.reverse)
   }
 
-  // subset problem for generating a set of balanced parens
   private def loopGen(zip: Zipper[Unit]): Gen[Loop] = Gen.sized { size =>
     def go(homeDist: Int, remaining: Int, acc: Gen[Stream[Stationary]]): Gen[Stream[Stationary]] =
       if (remaining <= homeDist && homeDist >= 0) acc.map(Stream.fill(homeDist)(StationaryPrev) #::: _)
@@ -197,33 +148,13 @@ object Arbitrarily {
     go(0, size, Gen.const(Stream())).map(steps => Loop(steps.reverse).get)
   }
 
-  private def shrinkLoopToBounds(l: Loop, zip: Zipper[Unit]): Loop = {
-    def go(steps: Stream[Stationary], z: Zipper[Unit], acc: Stream[Stationary]): Stream[Stationary] = {
-      steps match {
-        case Empty                  => acc
-        case StationaryNext #:: nps => z.next match {
-          case None          => go(dropNext(nps, StationaryPrev).getOrElse(dropNext(acc, StationaryPrev).get), z, acc)
-          case Some(nextZip) => go(nps, nextZip, StationaryNext #:: acc)
-        }
-        case StationaryPrev #:: nps => z.previous match {
-          case None          => go(dropNext(nps, StationaryNext).getOrElse(dropNext(nps, StationaryNext).get), z, acc)
-          case Some(prevZip) => go(nps, prevZip, StationaryPrev #:: acc)
-        }
-      }
-
+  def shrinkLoopToDepth(loop: Loop, n: Int): Loop = {
+    def go(l: Loop): Loop = {
+      if (l.nReach <= n) l
+      else go(l.shrinkNReach)
     }
 
-    def dropNext[A](s: Stream[A], toDrop: A): Option[Stream[A]] = {
-      def go(zip: Zipper[A]): Option[Stream[A]] = zip.next match {
-        case None => None
-        case Some(nZip) if nZip.focus == toDrop => Some(zip.lefts #::: zip.rights)
-        case Some(nZip) => go(nZip)
-      }
-
-      s.toZipper.fold[Option[Stream[A]]](None)(go)
-    }
-
-    Loop(go(l.steps, zip, Stream()).reverse).get
+    if (n < 0) loop else go(loop)
   }
 
   private def zipRight[A](zip: Zipper[A], i: Int): Zipper[A] = {
