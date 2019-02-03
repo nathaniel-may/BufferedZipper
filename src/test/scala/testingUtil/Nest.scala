@@ -1,33 +1,57 @@
 package testingUtil
 
 import scalaz.Scalaz.unfold
-import Nest._
 
-case class NestCons[A, B](outer: Pair[A, B], inner: Nest[A, B]) extends Nest[A, B] {
+trait Pair[+A, +B]
 
-  lazy val depth:  Int = 1 + inner.depth
-  lazy val aDepth: Int = 1 + inner.aDepth
-  lazy val bDepth: Int = 1 + inner.bDepth
+case class ABPair[+A, +B](a: A, b: B) extends Pair[A, B]
+case class BAPair[+A, +B](b: B, a: A) extends Pair[A, B]
 
-  def map[C, D](f: Pair[A, B] => Pair[C, D]): Nest[C, D] =
-    NestCons(f(outer), inner.map(f))
+case class NestCons[+A, +B](outer: Pair[A, B], inner: Nest[A, B]) extends Nest[A, B]
+case object EmptyNest extends Nest[Nothing, Nothing]
+
+object Nest {
+  def apply[A, B](pairs: Pair[A, B]*): Nest[A, B] =
+    pairs.foldLeft[Nest[A, B]](EmptyNest){ case (nest, p) => NestCons(p, nest) }
+}
+
+sealed trait Nest[+A, +B] {
+  val depth: Int = this match {
+    case EmptyNest         => 0
+    case NestCons(_, nest) => 1 + nest.depth
+  }
+
+  val aDepth: Int = this match {
+    case EmptyNest         => 0
+    case NestCons(_, nest) => 1 + nest.aDepth
+  }
+
+  val bDepth: Int = this match {
+    case EmptyNest         => 0
+    case NestCons(_, nest) => 1 + nest.bDepth
+  }
+
+  def map[C, D](f: Pair[A, B] => Pair[C, D]): Nest[C, D] = this match {
+    case EmptyNest         => EmptyNest
+    case NestCons(out, in) => NestCons(f(out), in.map(f))
+  }
 
   def insideOut: Nest[A, B] = reverse
 
   def reverse: Nest[A, B] = {
     def go(input: Nest[A, B], backwards: Nest[A, B]): Nest[A, B] = input match {
-      case Nest.Empty => backwards
+      case EmptyNest           => backwards
       case NestCons(out, nest) => go(nest, NestCons(out, backwards))
     }
 
-    go(this, Nest.Empty[A, B])
+    go(this, EmptyNest)
   }
 
   def drop(n: Int): Nest[A, B] = {
     def go(toDrop: Int, in: Nest[A, B]): Nest[A, B] = in match {
-      case Nest.Empty => Nest.Empty[A, B]
+      case EmptyNest                     => EmptyNest
       case NestCons(_, _) if toDrop <= 0 => in
-      case NestCons(_, nest) => go(toDrop - 1, nest)
+      case NestCons(_, nest)             => go(toDrop - 1, nest)
     }
 
     go(n, this)
@@ -35,84 +59,42 @@ case class NestCons[A, B](outer: Pair[A, B], inner: Nest[A, B]) extends Nest[A, 
 
   def take(n: Int): Nest[A, B] = {
     def go(toTake: Int, in: Nest[A, B], acc: Nest[A, B]): Nest[A, B] = in match {
-      case Nest.Empty => acc
+      case EmptyNest                     => acc
       case NestCons(_, _) if toTake <= 0 => acc
-      case NestCons(out, nest) => go(toTake - 1, nest, NestCons(out, acc))
+      case NestCons(out, nest)           => go(toTake - 1, nest, NestCons(out, acc))
     }
 
-    go(n, this, Nest.Empty[A, B]).reverse
+    go(n, this, EmptyNest).reverse
   }
 
-  def prepend(nest: Nest[A, B]): Nest[A, B] = nest match {
-    case Nest.Empty                 => this
-    case NestCons(pair, innerNest)  => NestCons(pair, prepend(innerNest))
+  def prepend[C >: A, D >: B](nest: Nest[C, D]): Nest[C, D] = nest match {
+    case EmptyNest                 => this
+    case NestCons(pair, innerNest) => NestCons(pair, prepend(innerNest))
   }
 
-  def append(nest: Nest[A, B]): Nest[A, B] = nest.prepend(this)
+  def append[C >: A, D >: B](nest: Nest[C, D]): Nest[C, D] = nest.prepend(this)
 
-  def pluck(index: Int): Nest[A, B] = this.take(index) prepend this.drop(index+1)
+  def pluck(index: Int): Nest[A, B] = this.take(index) prepend this.drop(index + 1)
 
   def toStream: Stream[Either[A, B]] = {
-    unfold[(Nest[A, B], Stream[Either[A, B]]), Either[A, B]]((this, Stream())){
-      case (Nest.Empty, Stream.Empty)           => None
-      case (Nest.Empty, ab #:: abs)             => Some((ab, (Nest.Empty[A, B], abs)))
-      case (NestCons(ABPair(a, b), nest), tail) => Some((Left(a),  (nest, Right(b) #:: tail)))
-      case (NestCons(BAPair(b, a), nest), tail) => Some((Right(b), (nest, Left(a)  #:: tail)))
+    unfold[(Nest[A, B], Stream[Either[A, B]]), Either[A, B]]((this, Stream())) {
+      case (EmptyNest, Stream.Empty)            => None
+      case (EmptyNest, ab #:: abs)              => Some((ab, (EmptyNest, abs)))
+      case (NestCons(ABPair(a, b), nest), tail) => Some((Left(a), (nest, Right(b) #:: tail)))
+      case (NestCons(BAPair(b, a), nest), tail) => Some((Right(b), (nest, Left(a) #:: tail)))
     }
   }
 
   //TODO use toStream.toList instead?
   def toList: List[Either[A, B]] = {
     def go(nested: Nest[A, B], lefts: List[Either[A, B]], rights: List[Either[A, B]]): List[Either[A, B]] = nested match {
-      case Empty                  => lefts.reverse ::: rights
+      case EmptyNest           => lefts.reverse ::: rights
       case NestCons(pair, nps) => pair match {
-        case ABPair(a, b) => go(nps, Left(a)  :: lefts, Right(b) :: rights)
-        case BAPair(b, a) => go(nps, Right(b) :: lefts, Left(a)  :: rights)
+        case ABPair(a, b) => go(nps, Left(a) :: lefts, Right(b) :: rights)
+        case BAPair(b, a) => go(nps, Right(b) :: lefts, Left(a) :: rights)
       }
     }
 
     go(this, List(), List())
-  }
-}
-
-trait Nest[A, B] {
-  val depth:  Int
-  val aDepth: Int
-  val bDepth: Int
-
-  def map[C, D](f: Pair[A, B] => Pair[C, D]): Nest[C, D]
-  def insideOut: Nest[A, B]
-  def reverse: Nest[A, B]
-  def drop(n: Int): Nest[A, B]
-  def take(n: Int): Nest[A, B]
-  def prepend(nest: Nest[A, B]): Nest[A, B]
-  def append(nest: Nest[A, B]): Nest[A, B]
-  def pluck(index: Int): Nest[A, B]
-  def toList: List[Either[A, B]]
-  def toStream: Stream[Either[A, B]]
-}
-
-object Nest {
-  trait Pair[A, B]
-
-  case class ABPair[A, B](a: A, b: B) extends Pair[A, B]
-  case class BAPair[A, B](b: B, a: A) extends Pair[A, B]
-
-  //TODO better way to deal with the type params?
-  object Empty extends Nest[_, _] {
-    val depth  = 0
-    val aDepth = 0
-    val bDepth = 0
-
-    def map[C, D](f: Pair[_, _] => Pair[C, D]): Nest[C, D] = Empty[C, D]
-    def insideOut: Nest[_, _] = this
-    def reverse: Nest[_, _] = this
-    def drop(n: Int): Nest[_, _] = this
-    def take(n: Int): Nest[_, _] = this
-    def prepend(nest: Nest[_, _]): Nest[_, _] = nest
-    def append(nest: Nest[_, _]): Nest[_, _] = nest
-    def pluck(index: Int): Nest[_, _] = this
-    def toList: List  [Either[_, _]] = List()
-    def toStream: Stream[Either[_, _]] = Stream()
   }
 }

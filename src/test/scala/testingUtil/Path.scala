@@ -2,7 +2,6 @@ package testingUtil
 
 import ImplicitClasses.StreamSyntax
 import testingUtil.Directions.{N, Next, P, Prev, PrevNext}
-import testingUtil.Nest.ABPair
 
 case class Path private (endAndBack: Nest[N, P], ls: Nest[Loop, Loop]) {
   val steps: Stream[PrevNext] =
@@ -11,16 +10,17 @@ case class Path private (endAndBack: Nest[N, P], ls: Nest[Loop, Loop]) {
       .flatten
 
   def removeLoop(index: Int):  Path = Path(endAndBack, ls.pluck(index))
-  def keepOneLoop(index: Int): Path = Path(endAndBack, ls.map(_ => Loop.empty).updated(index, ls.lift(index).getOrElse(Loop.empty)))
+  //TODO keepOneLoop is wrong.
+  def keepOneLoop(index: Int): Path = Path(endAndBack, Nest(ls.toStream.map(_.fold(identity, identity)).lift(index).fold(ABPair(Loop.empty, Loop.empty))(l => ABPair(l, Loop.empty))))
   def removeAllLoops: Path = Path(endAndBack, ls.map(_ => Loop.empty))
   lazy val loopsAndPositions: Vector[(Loop, Int)] = ls.zipWithIndex
     .map { case (loop, index) =>
       if(index < ls.size) (loop, index)
-      else (loop, index - (index - ls.size))}
+      else (loop, index - (index - ls.size)) }
 }
 object Path {
-  def apply(loops: NestCons[Loop, Loop]): Path =
+  def apply(loops: Nest[Loop, Loop]): Path =
     new Path(loops.map[N, P](_ => ABPair(Next, Prev)), loops)
 
-  val empty = Path(Vector(Loop.empty))
+  val empty: Path = Path(EmptyNest)
 }

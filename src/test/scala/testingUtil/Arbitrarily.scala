@@ -6,7 +6,6 @@ import scalaz.{Monad, Zipper}
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
-import scala.Stream.Empty
 
 import Directions._
 

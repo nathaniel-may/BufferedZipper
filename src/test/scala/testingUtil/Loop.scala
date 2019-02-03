@@ -7,7 +7,6 @@ case class Loop(adjacent: Vector[Nest[N, P]]) {
   lazy val pReach: Int = adjacent.map(_.bDepth).max
   lazy val steps: Stream[Stationary] = toStream
 
-
   def shrinkNReach: Loop = {
     def go(l: Loop): Loop = {
       if (l.nReach <= this.nReach || this.nReach <= 0) l
