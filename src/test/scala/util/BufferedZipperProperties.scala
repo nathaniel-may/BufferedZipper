@@ -26,40 +26,37 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       .fold[List[Int]](List())(_.toList) == inStream.toList
   }
 
-  property("list of unzipped elements is the same as the input with no buffer limit") = forAll {
+  property("list of elements unzipped forwards is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
       .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
-  property("list of unzipped elements is the same as the input with a small buffer limit") = forAll {
-    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(100L))
-      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
+  property("list of elements unzipped forwards is the same as the input with a small buffer limit") =
+    forAll(finiteIntStreamGen, cappedBufferSizeGen(300L)) {
+      (inStream: Stream[Int], size: CappedBuffer) => BufferedZipper[Id, Int](inStream, Some(size.cap))
+        .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
+    }
+
+  property("list of elements unzipped forwards is the same as the input regardless of buffer limit") = forAll {
+    (inStream: Stream[Int], size: FlexibleBuffer) =>
+      BufferedZipper[Id, Int](inStream, Some(size.cap))
+        .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
-  property("list of unzipped elements is the same as the input with a buffer limit of 0") = forAll {
-    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, Some(0L))
-      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
-  }
-
-  property("list of unzipped elements is the same as the input regardless of buffer limit") = forAll {
-    (inStream: Stream[Int], max: Option[Long]) =>
-      BufferedZipper[Id, Int](inStream, max).fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
+  property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
+    (inStream: Stream[Int], size: FlexibleBuffer) =>
+      BufferedZipper[Id, Int](inStream, Some(size.cap))
+        .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
   }
 
   property("next then prev should result in the first element regardless of buffer limit") =
-    forAll(boundedStreamAndPathsGen(Some(2), None), aBufferSize.arbitrary) {
-      (sp: StreamAndPath[Id, Int], size: BufferSize) => (for {
-        zipper <- BufferedZipper[Id, Int](sp.stream, size.max)
+    forAll(boundedStreamAndPathsGen(Some(2), None), flexibleBufferSizeGen) {
+      (sp: StreamAndPath[Id, Int], size: FlexibleBuffer) => (for {
+        zipper <- BufferedZipper[Id, Int](sp.stream, Some(size.cap))
         next   <- zipper.next
         prev   <- next.prev
       } yield prev.focus) == sp.stream.headOption
     }
-
-  property("list of elements unzipping from the back is the same as the input regardless of buffer limit") = forAll {
-    (inStream: Stream[Int], size: BufferSize) =>
-      BufferedZipper[Id, Int](inStream, size.max)
-        .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
-  }
 
   // TODO measureBufferContents is exponential
 //  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
@@ -82,36 +79,34 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer is not being used for streams of one or less elements when traversed once forwards") =
     forAll(boundedStreamAndPathsGen(Some(0), Some(1)), nonZeroBufferSizeGen(16)) {
-      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
-      (sp: StreamAndPath[Id, Int], size: BufferSize) =>
-        BufferedZipper[Id, Int](sp.stream, size.max)
+      (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
+        BufferedZipper[Id, Int](sp.stream, Some(size.cap))
           .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], sp.path.steps))
           .forall(_ == 0)
   }
 
+  // TODO is this using a unique stream?
   property("buffer never contains the focus") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-    (sp: StreamAndPath[Id, Int], size: BufferSize) =>
-      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
-      BufferedZipper(sp.stream, size.max)
+    (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
+      BufferedZipper(sp.stream, Some(size.cap))
         .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), sp.path.steps))
         .forall(_ == false)
-  }(implicitly, implicitly, implicitly, explain[BufferSize], implicitly) //TODO remove this line
+  }
 
   property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-    implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
-    (sp: StreamAndPath[Id, Int], size: BufferSize) =>
-      BufferedZipper[Id, Int](sp.stream, size.max)
+    (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
+      BufferedZipper[Id, Int](sp.stream, Some(size.cap))
         .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, measureBufferContents[Id, Int], sp.path.steps))
-        .forall(_ <= size.max.get)
+        .forall(_ <= size.cap)
   }
 
   // TODO replace var with state monad
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") = forAll {
-    (elem: Short, size: BufferSize) => {
+    (elem: Short, size: FlexibleBuffer) => {
       var outsideState: Long = 0
       val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })
       val io = for {
-        mBuff <- BufferedZipper[IO, Long](instructions, size.max)
+        mBuff <- BufferedZipper[IO, Long](instructions, Some(size.cap))
         focus =  for { buff <- mBuff } yield buff.focus
       } yield focus
       val      sameBeforeCall = outsideState == 0

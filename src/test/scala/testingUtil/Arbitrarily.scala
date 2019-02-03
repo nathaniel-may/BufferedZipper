@@ -20,20 +20,35 @@ object Arbitrarily {
   object StationaryNext extends N with Stationary { override def toString: String = "StationaryNext" }
   object StationaryPrev extends P with Stationary { override def toString: String = "StationaryPrev" }
 
-  case class BufferSize private (max: Option[Long], limits: Option[MinMax])
-  object BufferSize {
-    def apply(max: Option[Long], limits: Option[MinMax]): Option[BufferSize] = max match {
-      case None => limits match {
-        case None                                    => Some(new BufferSize(max, limits))
-        case Some(limit) if limit.max < Int.MaxValue => None
-        case Some(_)                                 => Some(new BufferSize(max, limits))
-      }
-      case Some(maxx) => limits match {
-        case None        => Some(new BufferSize(max, limits))
-        case Some(limit) => if (limit.contains(maxx)) Some(new BufferSize(max, limits)) else None
-      }
-    }
+  trait BufferSize { val cap: Long }
+
+  case class FlexibleBuffer private(cap: Long) extends BufferSize
+  object FlexibleBuffer {
+    def apply(cap: Long): Option[FlexibleBuffer] =
+      if (cap >= 0) Some(new FlexibleBuffer(cap)) else None
   }
+
+  case class CappedBuffer private (cap: Long, max: Long) extends BufferSize
+  object CappedBuffer {
+    def apply(cap: Long, max: Long): Option[CappedBuffer] =
+      if (cap <= max && cap >= 0 && max >= 0) Some(new CappedBuffer(cap, max)) else None
+  }
+
+  case class LargerBuffer private (cap: Long, min: Long) extends BufferSize
+  object LargerBuffer {
+    def apply(cap: Long, min: Long): Option[LargerBuffer] =
+      if (cap >= min && cap >= 0 && min >= 0) Some(new LargerBuffer(cap, min)) else None
+  }
+
+  case class RangeBuffer private (cap: Long, min: Long, max: Long) extends BufferSize
+  object RangeBuffer {
+    def apply(cap: Long, min: Long, max: Long): Option[RangeBuffer] =
+      if (min <= max && cap <= max && cap >= min && cap >= 0 && max >= 0 && min >= 0)
+        Some(new RangeBuffer(cap, min, max))
+      else
+        None
+  }
+
   case class StreamAndPath[M[_]: Monad, A](stream: Stream[M[A]], path: Path, limits: Option[MinMax])
   case class MinMax(min: Long, max: Long) {
     def contains(i: Long): Boolean = i >= min && i <= max
@@ -66,21 +81,21 @@ object Arbitrarily {
     val empty = Path(Vector(Loop.empty))
   }
 
-  def nonZeroBufferSizeGen(min: Long): Gen[BufferSize] = bufferSizeGen(Some(min), None, noneOk = false)
+  val finiteIntStreamGen: Gen[Stream[Int]] = Gen.sized { size =>
+    Gen.containerOfN[Stream, Int](size, Arbitrary.arbInt.arbitrary)
+  }
 
-  def bufferSizeGen(min: Option[Long], max: Option[Long], noneOk: Boolean): Gen[BufferSize] = Gen.sized { size =>
-    val minn: Long = min.getOrElse(0L)
-    val maxx: Long = max.getOrElse(Int.MaxValue.toLong)
-    Gen.choose(16, 16).map { bump => // TODO this is cheap
-      (if (size <= 0 && noneOk) None
-      else if (size <= 0 && !noneOk) Some(minn)
-      else Some(minn + (bump * (size.toLong - 1L)))
-        .filter(_ <= maxx).fold(Some(maxx))(Some(_))
-        .filter(_ >= minn).fold(Some(minn))(Some(_))
-        )
-        .fold(BufferSize(None, minMax(min, max)))(optMax => BufferSize(Some(optMax), minMax(min, max)))
-        .get
-    }
+  def nonZeroBufferSizeGen(min: Long): Gen[LargerBuffer] = Gen.sized { size =>
+    Gen.const(LargerBuffer(16L * size + min, min).get)
+  }
+
+  def cappedBufferSizeGen(max: Long): Gen[CappedBuffer] = Gen.sized { size =>
+    Gen.const(CappedBuffer(16L * size, max)
+        .fold(CappedBuffer(max, max).get)(identity))
+  }
+
+  val flexibleBufferSizeGen: Gen[FlexibleBuffer] = Gen.sized { size =>
+    Gen.const(FlexibleBuffer(16L * size).get)
   }
 
   def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPath[M, Int]] =
@@ -101,26 +116,16 @@ object Arbitrarily {
       }
     }
 
-  implicit val aBufferSize:           Arbitrary[BufferSize]             = Arbitrary(bufferSizeGen(None, None, noneOk = true))
   implicit val anIdIntStreamAndPaths: Arbitrary[StreamAndPath[Id, Int]] = Arbitrary(streamAndPathsGen)
   implicit val anIOIntStreamAndPaths: Arbitrary[StreamAndPath[IO, Int]] = Arbitrary(streamAndPathsGen)
+  implicit val aFlexibleBufferSize:   Arbitrary[FlexibleBuffer]         = Arbitrary(flexibleBufferSizeGen)
 
-  implicit val shrinkBufferSize: Shrink[BufferSize] = Shrink { buffSize =>
-    // TODO println(s"shrinking: $buffSize")
-    val shrinks = (buffSize.max match {
-      case None       => Stream()
-      case Some(size) => buffSize.limits match {
-        case None         => Stream(size-16, size/2).filter(_ < size)
-        case Some(limits) => Stream(size-16, size/2).filter(_ < size)
-                               .filter(limits.contains)
-      }
-    }).map(long => BufferSize(Some(long), buffSize.limits).get)
-    // TODO println(s"list of options: ${shrinks.toList}")
-    shrinks
+  implicit val shrinkBufferSize: Shrink[BufferSize] = Shrink[BufferSize] {
+    buffSize => Stream.tabulate((buffSize.cap / 16L).toInt)(i => buffSize.cap - i*16L)
+      .flatMap(shrunkCap => FlexibleBuffer(shrunkCap).fold[Stream[FlexibleBuffer]](Stream())(Stream(_)))
   }
 
   implicit val shrinkPath: Shrink[Path] = Shrink { path =>
-    // tODO println(s"shrinking path: $path")
     path.removeAllLoops #:: path.ls.indices.toStream.map(path.keepOneLoop)
   }
 
