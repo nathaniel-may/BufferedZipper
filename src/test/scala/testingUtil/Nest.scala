@@ -2,7 +2,47 @@ package testingUtil
 
 import scalaz.Scalaz.unfold
 
-trait Pair[+A, +B]
+
+//TODO make some syntax import to make the pretty stuff work easily
+
+//TODO delete this
+object SyntaxTest {
+  import Pair._
+
+  private case class UnfinishedABNest[A, B](nest: Nest[A, B], a: A) extends Pair[A, B] {
+    def >>(b: B): Nest[A, B] = NestCons(ABPair(a, b), nest)
+  }
+
+  private case class UnfinishedBANest[A, B](nest: Nest[A,  B], b: B) extends Pair[A, B] {
+    def >>(a: A): Nest[A, B] = NestCons(BAPair(b, a), nest)
+  }
+
+  implicit class NestSyntax[A](a: A) {
+    def <<[B](nest: Nest[A, B]): UnfinishedABNest[A, B] = ???
+    def <<[B](nest: Nest[B, A]): UnfinishedBANest[B, A] = ???
+    def <<   (nest: Nest[A, A]): UnfinishedABNest[A, A] = ???
+  }
+
+  val nest: Nest[Int, Int] = <<(1, 2)>>
+  val n1:   Nest[Int, Int] = 0<<nest>>3
+  val n2:   Nest[Int, Int] = 0<<(1<< EmptyNest >>2)>>3
+  val n0:   Nest[Boolean, String] = EmptyNest
+  val n3:   Nest[Boolean, String] = "hey" << (true << n0 >> "hi") >> false
+
+  //TODO figure this out too.
+//  val i = n2 match {
+//    case --             => 0
+//    case a<<nest>>b => a
+//  }
+}
+
+object Pair {
+  def <<[A, B](pair: (A, B)) : Pair[A, B] = ABPair[A, B](pair._1, pair._2)
+}
+
+trait Pair[+A, +B] {
+  def >> : Nest[A, B] = NestCons(this, EmptyNest)
+}
 
 case class ABPair[+A, +B](a: A, b: B) extends Pair[A, B]
 case class BAPair[+A, +B](b: B, a: A) extends Pair[A, B]
@@ -13,6 +53,8 @@ case object EmptyNest extends Nest[Nothing, Nothing]
 object Nest {
   def apply[A, B](pairs: Pair[A, B]*): Nest[A, B] =
     pairs.foldLeft[Nest[A, B]](EmptyNest){ case (nest, p) => NestCons(p, nest) }
+
+  def <<>>[A, B](a: A)(b: B): Nest[A, B] = //  B<<A<<(A, B)>>B>>A
 }
 
 sealed trait Nest[+A, +B] {
@@ -101,8 +143,8 @@ sealed trait Nest[+A, +B] {
     def go(nested: Nest[A, B], lefts: List[Either[A, B]], rights: List[Either[A, B]]): List[Either[A, B]] = nested match {
       case EmptyNest           => lefts.reverse ::: rights
       case NestCons(pair, nps) => pair match {
-        case ABPair(a, b) => go(nps, Left(a) :: lefts, Right(b) :: rights)
-        case BAPair(b, a) => go(nps, Right(b) :: lefts, Left(a) :: rights)
+        case ABPair(a, b) => go(nps, Left(a)  :: lefts, Right(b) :: rights)
+        case BAPair(b, a) => go(nps, Right(b) :: lefts, Left(a)  :: rights)
       }
     }
 
