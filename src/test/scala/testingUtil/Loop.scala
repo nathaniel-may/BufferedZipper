@@ -5,11 +5,21 @@ import Directions._
 case class Loop(adjacent: Vector[Nest[N, P]]) {
   lazy val nReach: Int = adjacent.map(_.aDepth).max
   lazy val pReach: Int = adjacent.map(_.bDepth).max
+  lazy val size:   Int = adjacent.map(_.depth).sum
   lazy val steps: Stream[Stationary] = toStream
+
+  def shrinkNReachTo(reach: Int): Loop ={
+    def go(l: Loop): Loop = {
+      if(l.nReach <= reach) l
+      else go(l.shrinkNReach)
+    }
+
+    go(this)
+  }
 
   def shrinkNReach: Loop = {
     def go(l: Loop): Loop = {
-      if (l.nReach <= this.nReach || this.nReach <= 0) l
+      if (l.nReach < this.nReach || this.nReach <= 0) l
       else {
         go(Loop(adjacent.map { nps =>
           if(nps.aDepth < this.nReach) nps

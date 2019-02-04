@@ -21,6 +21,8 @@ sealed trait Nest[+A, +B] {
     case NestCons(_, nest) => 1 + nest.depth
   }
 
+  val size: Int = depth
+
   val aDepth: Int = this match {
     case EmptyNest         => 0
     case NestCons(_, nest) => 1 + nest.aDepth
@@ -69,12 +71,21 @@ sealed trait Nest[+A, +B] {
 
   def prepend[C >: A, D >: B](nest: Nest[C, D]): Nest[C, D] = nest match {
     case EmptyNest                 => this
-    case NestCons(pair, innerNest) => NestCons(pair, prepend(innerNest))
+    case NestCons(pair, innerNest) => NestCons(pair, prepend(innerNest)) // TODO compiling but not type checking???
   }
+
+  def prepend[C >: A, D >: B](pair: Pair[C, D]): Nest[C, D] = prepend(Nest(pair))
 
   def append[C >: A, D >: B](nest: Nest[C, D]): Nest[C, D] = nest.prepend(this)
 
-  def pluck(index: Int): Nest[A, B] = this.take(index) prepend this.drop(index + 1)
+  def append[C >: A, D >: B](pair: Pair[C, D]): Nest[C, D] = append(Nest(pair))
+
+  def pluck(index: Int): Nest[A, B] = this.take(index) append this.drop(index + 1)
+
+  def lift(index: Int): Option[Pair[A, B]] = this.drop(index) match {
+    case EmptyNest         => None
+    case NestCons(pair, _) => Some(pair)
+  }
 
   def toStream: Stream[Either[A, B]] = {
     unfold[(Nest[A, B], Stream[Either[A, B]]), Either[A, B]]((this, Stream())) {

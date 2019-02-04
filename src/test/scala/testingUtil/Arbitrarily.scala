@@ -90,25 +90,27 @@ object Arbitrarily {
   }
 
   implicit val shrinkPath: Shrink[Path] = Shrink { path =>
-    path.removeAllLoops #:: path.ls.indices.toStream.map(path.keepOneLoop)
+    path.noLoops #:: path.ls.toStream.indices.toStream.map(path.keepOneLoop)
   }
 
   //shrinks the path, then the stream
   implicit val shrinkStreamAndPath: Shrink[StreamAndPath[Id, Int]] = Shrink[StreamAndPath[Id, Int]] { sp =>
     println(s"shrinking: $sp")
-    val shrunkPaths: Stream[StreamAndPath[Id, Int]] = sp.path.ls.indices.map(sp.path.keepOneLoop).toStream.append(Stream(sp.path.removeAllLoops))
+    val loopStream = sp.path.ls.toStream
+
+    val shrunkPaths: Stream[StreamAndPath[Id, Int]] = loopStream.indices.map(sp.path.keepOneLoop).toStream.append(Stream(sp.path.noLoops))
       .map(p => StreamAndPath[Id, Int](sp.stream, p, sp.limits))
 
-    val shrunkStreams: Stream[StreamAndPath[Id, Int]] = sp.stream.indices.reverse.toStream
-      .map {
-        i => (sp.stream.take(i), sp.path.loopsAndPositions.map {
-          case (loop, index) => Stream.fill(i)(()).toZipper.fold(Loop.empty)(z => shrinkLoopToDepth(loop, zipRight(z, index))) }) }
+    val shrunkStreams: Stream[StreamAndPath[Id, Int]] =
+      sp.stream.indices.reverse.toStream.map {
+        i => (sp.stream.take(i), sp.path.ls.take(i).toStream.zipWithIndex.map {
+          case (loop, index) => loop.fold(identity, identity).shrinkNReachTo(i-index-1) }) } //TODO check this -1
         .map { case (s, loops) => StreamAndPath[Id, Int](s, Path(loops), sp.limits) }
 
     val shrunkStreamsLessLoops: Stream[StreamAndPath[Id, Int]] =
       shrunkStreams.flatMap { shrunkSp =>
-        shrunkSp.path.ls.indices.toStream.map(shrunkSp.path.keepOneLoop)
-          .append(Stream(shrunkSp.path.removeAllLoops))
+        shrunkSp.path.ls.toStream.indices.toStream.map(shrunkSp.path.keepOneLoop)
+          .append(Stream(shrunkSp.path.noLoops))
           .map(p => StreamAndPath[Id, Int](sp.stream, p, sp.limits)) }
 
     shrunkPaths #::: shrunkStreams #::: shrunkStreamsLessLoops
@@ -129,22 +131,17 @@ object Arbitrarily {
     } yield Path(there.reverse ++ back.reverse)
   }
 
-  private def loopGen(zip: Zipper[Unit]): Gen[Loop] = Gen.sized { size =>
-    def go(homeDist: Int, remaining: Int, acc: Gen[Stream[Stationary]]): Gen[Stream[Stationary]] =
-      if (remaining <= homeDist && homeDist >= 0) acc.map(Stream.fill(homeDist)(StationaryPrev) #::: _)
-      else if(remaining <= homeDist && homeDist <= 0) acc.map(Stream.fill(homeDist)(StationaryNext) #::: _)
-      else for {
-        stream  <- acc
-        np      <- stationaryGen
-        validNp =  np match {
-                     case _: N => zip.next    .fold[Stationary](StationaryPrev)(_ => StationaryNext)
-                     case _: P => zip.previous.fold[Stationary](StationaryNext)(_ => StationaryPrev)
-                   }
-        dist    =  validNp match { case _: N => 1; case _: P => -1 }
-        recurse <- go(homeDist + dist, remaining-1, Gen.const(validNp #:: stream))
-      } yield recurse
+  private val loopGen: Gen[Loop] = Gen.sized { size =>
+    def go(gLoop: Gen[Loop]): Gen[Loop] = for {
+      loop   <- gLoop
+      choice <- Gen.choose(0, loop.adjacent.size)
+      pair   <- stationaryPairGen
+    } yield if (loop.size >= size) loop
+            else if (choice == loop.adjacent.size) go(Loop(loop.adjacent :+ Nest(pair)))
+            else go(Loop(loop.adjacent.lift(choice).map { nest => loop.adjacent.updated(choice, nest.prepend(pair)) }.get ))
 
-    go(0, size, Gen.const(Stream())).map(steps => Loop(steps.reverse).get)
+
+    go(Gen.const(Loop.empty))
   }
 
   def shrinkLoopToDepth(loop: Loop, n: Int): Loop = {
@@ -161,7 +158,8 @@ object Arbitrarily {
     else zipRight(zip.next.get, i-1) // TODO this is kind of messy
   }
 
-  private val stationaryGen: Gen[Stationary] = arbBool.arbitrary.map(b => if(b) StationaryNext else StationaryPrev)
+  private val stationaryPairGen: Gen[Pair[N, P]] =
+    arbBool.arbitrary.map(b => if(b) ABPair(StationaryNext, StationaryPrev) else BAPair(StationaryPrev, StationaryNext))
 
   private def minMax(min: Option[Long], max: Option[Long]): Option[MinMax] = (max, min) match {
     case (None, None)             => None

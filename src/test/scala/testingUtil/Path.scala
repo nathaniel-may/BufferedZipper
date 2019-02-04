@@ -9,15 +9,39 @@ case class Path private (endAndBack: Nest[N, P], ls: Nest[Loop, Loop]) {
       ls.toStream.map(_.fold(identity, identity)).map(_.toList))
       .flatten
 
-  def removeLoop(index: Int):  Path = Path(endAndBack, ls.pluck(index))
-  //TODO keepOneLoop is wrong.
-  def keepOneLoop(index: Int): Path = Path(endAndBack, Nest(ls.toStream.map(_.fold(identity, identity)).lift(index).fold(ABPair(Loop.empty, Loop.empty))(l => ABPair(l, Loop.empty))))
-  def removeAllLoops: Path = Path(endAndBack, ls.map(_ => Loop.empty))
-  lazy val loopsAndPositions: Vector[(Loop, Int)] = ls.zipWithIndex
-    .map { case (loop, index) =>
-      if(index < ls.size) (loop, index)
-      else (loop, index - (index - ls.size)) }
+  def removeLoop(index: Int): Path = Path(endAndBack, ls.pluck(index))
+
+  //nests don't make this particularly easy
+  def keepOneLoop(index: Int): Path = {
+    val emptyPair = ABPair(Loop.empty, Loop.empty)
+    val (thereOrBack, nestIndex) = if (index < ls.size) (Next, index)
+                                   else (Prev, (ls.size - 1) - (index - (ls.size - 1)))
+    val emptyLoops = ls.map(_ => emptyPair)
+    val oneLoopPair = (thereOrBack, ls.lift(nestIndex).getOrElse(emptyPair)) match {
+      case (_: N, ABPair(a, _)) => ABPair(a,          Loop.empty)
+      case (_: P, ABPair(_, b)) => ABPair(Loop.empty, b)
+      case (_: N, BAPair(b, _)) => BAPair(b,          Loop.empty)
+      case (_: P, BAPair(_, a)) => BAPair(Loop.empty, a)
+    }
+
+    Path(
+      endAndBack,
+      emptyLoops.take(nestIndex)
+        .append(oneLoopPair)
+        .append(emptyLoops.drop(nestIndex + 1))
+    )
+
+  }
+
+  def noLoops: Path = Path(endAndBack, ls.map(_ => ABPair(Loop.empty, Loop.empty)))
+
+  //TODO remove tODO fix the zipWithIndex incorrectness that I replaced this with. ugh.
+//  lazy val loopsAndPositions: Vector[(Loop, Int)] = ls.zipWithIndex
+//    .map { case (loop, index) =>
+//      if(index < ls.size) (loop, index)
+//      else (loop, index - (index - ls.size)) }
 }
+
 object Path {
   def apply(loops: Nest[Loop, Loop]): Path =
     new Path(loops.map[N, P](_ => ABPair(Next, Prev)), loops)
