@@ -7,33 +7,24 @@ import scalaz.Scalaz.unfold
 
 //TODO delete this
 object SyntaxTest {
-  import Pair._
-
-  private case class UnfinishedABNest[A, B](nest: Nest[A, B], a: A) extends Pair[A, B] {
-    def >>(b: B): Nest[A, B] = NestCons(ABPair(a, b), nest)
-  }
-
-  private case class UnfinishedBANest[A, B](nest: Nest[A,  B], b: B) extends Pair[A, B] {
-    def >>(a: A): Nest[A, B] = NestCons(BAPair(b, a), nest)
-  }
 
   implicit class NestSyntax[A](a: A) {
-    def <<[B](nest: Nest[A, B]): UnfinishedABNest[A, B] = ???
-    def <<[B](nest: Nest[B, A]): UnfinishedBANest[B, A] = ???
-    def <<   (nest: Nest[A, A]): UnfinishedABNest[A, A] = ???
+    def <<[B](nest: Nest[A, B]): UnfinishedABNest[A, B] = UnfinishedABNest(nest, a)
+    def <<[B](nest: Nest[B, A]): UnfinishedBANest[B, A] = UnfinishedBANest(nest, a)
+    def <<   (nest: Nest[A, A]): UnfinishedABNest[A, A] = UnfinishedABNest(nest, a)
   }
 
-  val nest: Nest[Int, Int] = <<(1, 2)>>
+  val nest: Nest[Int, Int] = Nest[Int, Int]((1,2))
   val n1:   Nest[Int, Int] = 0<<nest>>3
   val n2:   Nest[Int, Int] = 0<<(1<< EmptyNest >>2)>>3
   val n0:   Nest[Boolean, String] = EmptyNest
   val n3:   Nest[Boolean, String] = "hey" << (true << n0 >> "hi") >> false
 
-  //TODO figure this out too.
-//  val i = n2 match {
-//    case --             => 0
-//    case a<<nest>>b => a
-//  }
+  nest match {
+    case EmptyNest       => 1
+    case a << nest0 >> b => a+1 << nest0 >> b+1
+  }
+
 }
 
 object Pair {
@@ -50,11 +41,26 @@ case class BAPair[+A, +B](b: B, a: A) extends Pair[A, B]
 case class NestCons[+A, +B](outer: Pair[A, B], inner: Nest[A, B]) extends Nest[A, B]
 case object EmptyNest extends Nest[Nothing, Nothing]
 
+final case class <<[A, B](leftOuter: A, inner: Nest[A, B]) extends Nest[A, B]
+final case class >>[A, B](inner: Nest[A, B], rightOuter: B) extends Nest[A, B]
+
+private sealed case class UnfinishedABNest[A, B](nest: Nest[A, B], a: A) extends Pair[A, B] {
+  def >>(b: B): Nest[A, B] = NestCons(ABPair(a, b), nest)
+  //def ::[B >: A] (x: B): List[B] =
+  def <<[C >: A, D >: B]() = ???
+}
+
+private sealed case class UnfinishedBANest[A, B](nest: Nest[A,  B], b: B) extends Pair[A, B] {
+  def >>(a: A): Nest[A, B] = NestCons(BAPair(b, a), nest)
+  //def ::[B >: A] (x: B): List[B] =
+  def <<[C >: A, D >: B](a: A) = ???
+}
+
 object Nest {
   def apply[A, B](pairs: Pair[A, B]*): Nest[A, B] =
     pairs.foldLeft[Nest[A, B]](EmptyNest){ case (nest, p) => NestCons(p, nest) }
 
-  def <<>>[A, B](a: A)(b: B): Nest[A, B] = //  B<<A<<(A, B)>>B>>A
+  def apply[A, B](pair: (A, B)) = Nest(ABPair(pair._1, pair._2))
 }
 
 sealed trait Nest[+A, +B] {
@@ -150,4 +156,9 @@ sealed trait Nest[+A, +B] {
 
     go(this, List(), List())
   }
+
+  //TODO del? def ::[B >: A] (x: B): List[B] =
+//  def <<[C >: A, D >: B](nest: Nest[C, D]): UnfinishedABNest[C, D] = UnfinishedABNest(nest, a)
+//  def <<[C >: A, D >: B](nest: Nest[D, C]): UnfinishedBANest[D, C] = UnfinishedBANest(nest, a)
+
 }
