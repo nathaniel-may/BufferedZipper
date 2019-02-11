@@ -4,6 +4,8 @@ scalaVersion := "2.12.8"
 
 lazy val randpix = (project in file("."))
   .settings(
+    resolvers += "jitpack" at "https://jitpack.io",
+
     libraryDependencies += "org.scala-lang.modules"   %%  "scala-xml"   % "1.1.1",
     libraryDependencies += "com.thoughtworks.binding" %%  "binding"     % "11.6.0",
 
@@ -14,10 +16,7 @@ lazy val randpix = (project in file("."))
     libraryDependencies += "co.fs2"             %% "fs2-io"      % "1.0.2",
     libraryDependencies += "com.github.jbellis" %  "jamm"        % "0.3.3",
 
-
+    libraryDependencies += "com.github.nathaniel-may" % "nest" % "v0.1.0" % "test",
     libraryDependencies += "org.scalatest"  %% "scalatest"   % "3.0.5"  % "test",
     libraryDependencies += "org.scalacheck" %% "scalacheck"  % "1.14.0" % "test"
-  ).
-  jsSettings(
-    libraryDependencies += "org.scala-js" %% "scalajs-dom" % "0.9.6"
   )

@@ -1,52 +1,32 @@
 package testingUtil
 
+import nest._
 import Directions._
 
-case class Loop(adjacent: Vector[Nest[N, P]]) {
-  lazy val nReach: Int = adjacent.map(_.aDepth).max
-  lazy val pReach: Int = adjacent.map(_.bDepth).max
-  lazy val size:   Int = adjacent.map(_.depth).sum
-  lazy val steps: Stream[Stationary] = toStream
-
-  def shrinkNReachTo(reach: Int): Loop ={
-    def go(l: Loop): Loop = {
-      if(l.nReach <= reach) l
-      else go(l.shrinkNReach)
-    }
-
-    go(this)
-  }
-
-  def shrinkNReach: Loop = {
-    def go(l: Loop): Loop = {
-      if (l.nReach < this.nReach || this.nReach <= 0) l
-      else {
-        go(Loop(adjacent.map { nps =>
-          if(nps.aDepth < this.nReach) nps
-          else nps match {
-            case NestCons(_, inner) => inner
-            case _              => nps
-          }
-        }))
-      }
-    }
-
-    go(this)
-  }
-
-  def toStream: Stream[Stationary] =
-    adjacent.map(x =>
-      x.toStream.map(
-        _.fold[Stationary](_ => StationaryNext, _ => StationaryPrev)))
-      .reduce(_ #::: _)
-
-  def toList: List[Stationary] =
-    adjacent.map(
-      _.toList.map(
-        _.fold[Stationary](_ => StationaryNext, _ => StationaryPrev)))
-    .reduce(_ ::: _)
+case class Loop private (steps: Stream[Stationary], stops: Stream[Int]) {
+  lazy val size:   Int = steps.size
 }
 
 object Loop {
-  val empty = Loop(Vector())
+  val empty = new Loop(Stream(), Stream())
+
+  /**
+    * list of relative indexes this path will visit
+    *
+    * example:
+    * Stream(1, 2, 3)  => Loop(Stream(N, N, N, P, P, P))
+    * Stream(1, 3, -1) => Loop(Stream(N, N, N, P, P, P, P, N))
+    * Stream(0)        => Loop(Stream())
+    */
+  def apply(stops: Stream[Int]): Loop = {
+    Loop((stops #::: Stream(0)).foldLeft[(Stream[Stationary], Int)]((Stream(), 0)) {
+      case ((steps, pos), stop) =>
+        if(stop-pos > 0)
+          (steps #::: Stream.fill(stop-pos)(StationaryNext), stop)
+        else if (stop-pos < 0)
+          (steps #::: Stream.fill(-1*(stop-pos))(StationaryPrev), stop)
+        else
+          (steps, stop)
+    }._1, stops)
+  }
 }
