@@ -3,7 +3,7 @@ package testingUtil
 import scalaz.Monad
 import util.BufferedZipper
 import org.github.jamm.MemoryMeter
-import testingUtil.Arbitrarily.{PrevNext, N, P}
+import testingUtil.Directions.{PrevNext, N, P}
 
 import scala.collection.immutable.Stream.Empty
 
@@ -82,4 +82,18 @@ object BufferedZipperFunctions {
 
     goToEnd(in).flatMap(x => go(x, point(List())))
   }
+
+  private def mapAlong[M[_] : Monad, A, B](path: Stream[PrevNext])(in: BufferedZipper[M, A], f: A => B) : M[List[B]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(p: Stream[PrevNext], z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] = p match {
+      case Empty            => l
+      case (_: N) #:: steps => z.next.fold(l)(mn => mn.flatMap(n => go(steps, n, l.map(f(n.focus) :: _))))
+      case (_: P) #:: steps => z.prev.fold(l)(mp => mp.flatMap(p => go(steps, p, l.map(f(p.focus) :: _))))
+    }
+
+    go(path, in, point(List())).map(_.reverse)
+  }
+
 }
