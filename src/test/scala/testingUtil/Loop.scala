@@ -21,12 +21,10 @@ object Loop {
   def apply(stops: Stream[Int]): Loop = {
     Loop((stops #::: Stream(0)).foldLeft[(Stream[Stationary], Int)]((Stream(), 0)) {
       case ((steps, pos), stop) =>
-        if(stop-pos > 0)
+        if(stop-pos >= 0)
           (steps #::: Stream.fill(stop-pos)(StationaryNext), stop)
-        else if (stop-pos < 0)
-          (steps #::: Stream.fill(-1*(stop-pos))(StationaryPrev), stop)
         else
-          (steps, stop)
+          (steps #::: Stream.fill(-1*(stop-pos))(StationaryPrev), stop)
     }._1, stops)
   }
 }

@@ -2,7 +2,7 @@ package testingUtil
 
 import nest._
 import ImplicitClasses.StreamSyntax
-import testingUtil.Directions.{N, Next, P, Prev, PrevNext}
+import testingUtil.Directions.{Next, Prev, PrevNext}
 
 case class Path private (endAndBack: Stream[PrevNext], ls: Nest[Loop, Loop]) {
   val steps: Stream[PrevNext] =
