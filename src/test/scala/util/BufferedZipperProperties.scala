@@ -85,7 +85,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], sp.path.steps))
 //          .forall(_ == 0)
 //  }
-  
+
   // TODO change to arbitrary path
   property("buffer never contains the focus when traversed forwards") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16)) {
@@ -95,12 +95,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           .forall(_ == false)
     }
 
-//  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-//    (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
-//      BufferedZipper[Id, Int](sp.stream, Some(size.cap))
-//        .fold[List[Long]](List())(unzipAndMapViaPath[Id, Int, Long](_, measureBufferContents[Id, Int], sp.path.steps))
-//        .forall(_ <= size.cap)
-//  }
+  // TODO change to arbitrary path
+  property("buffer limit is never exceeded when traversed forwards") =
+    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
+      (s: Stream[Int], size: LargerBuffer) =>
+        BufferedZipper[Id, Int](s, Some(size.cap))
+          .fold[List[Long]](List())(unzipAndMap[Id, Int, Long](Forwards, _, measureBufferContents[Id, Int]))
+          .forall(_ <= size.cap)
+    }
  
   // TODO replace var with state monad
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") =
