@@ -4,7 +4,7 @@ object BufferTypes {
 
   trait BufferSize { val cap: Long }
 
-  case class FlexibleBuffer private(cap: Long) extends BufferSize
+  case class FlexibleBuffer private (cap: Long) extends BufferSize
   object FlexibleBuffer {
     def apply(cap: Long): Option[FlexibleBuffer] =
       if (cap >= 0) Some(new FlexibleBuffer(cap)) else None

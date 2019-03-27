@@ -1,12 +1,11 @@
 package util
 
 import org.scalacheck.{Arbitrary, Gen}
-import Arbitrary.{arbBool, arbInt}
+import scalaz.Monad
+import scalaz.effect.IO
+import scalaz.Id
 import BufferTypes._
-import scalaz.{Monad, Zipper}
-import testingUtil.Arbitrarily.{StreamAndPath, minMax, stationaryPairGen}
-import testingUtil.Directions.{N, P, StationaryNext, StationaryPrev}
-import testingUtil.{Loop, Path}
+import Directions.{Next, Prev, PrevNext}
 
 object Generators {
 
@@ -27,52 +26,27 @@ object Generators {
     Gen.const(FlexibleBuffer(16L * size).get)
   }
 
-  private val stationaryPairGen: Gen[Pair[N, P]] =
-    arbBool.arbitrary.map(b => if(b) ABPair(StationaryNext, StationaryPrev) else BAPair(StationaryPrev, StationaryNext))
+  def bZipGen[M[_]: Monad, A](buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    streamGenMin[M, A](1)(implicitly[Monad[M]], evsa.arbitrary, eva.arbitrary)
+      .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, Some(buff.cap)).get } }
 
+  def bZipGenMin[M[_]: Monad, A](minSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    streamGenMin[M, A](minSize)(implicitly[Monad[M]], evsa.arbitrary, eva.arbitrary)
+      .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, Some(buff.cap)).get } }
 
-  private def pathGen(streamLength: Int): Gen[Path] = Gen.sized { size => // TODO size never forwarded to loop
-    def go(zip: Zipper[Unit], progress: Zipper[Unit] => Option[Zipper[Unit]], acc: Gen[Vector[Loop]]): Gen[Vector[Loop]] = progress(zip) match {
-      case None       => acc
-      case Some(pZip) => go(pZip, progress, acc.flatMap(v => loopGen(zip).map(v :+ _)))
-    }
+  def bZipGenMax[M[_]: Monad, A](maxSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[M[BufferedZipper[M, A]]] =
+    streamGenMax[M, A](maxSize)(implicitly[Monad[M]], evsa, eva)
+      .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, Some(buff.cap)).get } }
 
-    if (streamLength == 0) Path.empty
-    else for {
-      there <- go(Stream.fill(streamLength)(()).toZipper.get, _.next,     Gen.const(Vector()))
-      back  <- go(Stream.fill(streamLength)(()).toZipper.get, _.previous, Gen.const(Vector()))
-    } yield Path(there.reverse ++ back.reverse)
+  private def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
+    evsa.flatMap { s => Gen.pick(2, eva, eva).map(x => x.toStream #::: s) }
+      .map(_.map(a => implicitly[Monad[M]].point(a)))
+
+  private def streamGenMax[M[_]: Monad, A](maxSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
+    evsa.flatMap(s => Gen.pick(1, eva, eva).map { _.head #:: s.take(maxSize) } ).map(_.map(a => implicitly[Monad[M]].point(a)))
+
+  private def pathGen(streamLength: Int): Gen[Stream[PrevNext]] = Gen.sized { size =>
+    Gen.pick(size, List(Next, Next, Prev)).map(_.toStream)
   }
-
-  private val loopGen: Gen[Loop] = Gen.sized { size =>
-    def go(gLoop: Gen[Loop]): Gen[Loop] = for {
-      loop   <- gLoop
-      choice <- Gen.choose(0, loop.adjacent.size)
-      pair   <- stationaryPairGen
-    } yield if (loop.size >= size) loop
-    else if (choice == loop.adjacent.size) go(Loop(loop.adjacent :+ Nest(pair)))
-    else go(Loop(loop.adjacent.lift(choice).map { nest => loop.adjacent.updated(choice, nest.prepend(pair)) }.get ))
-
-
-    go(Gen.const(Loop.empty))
-  }
-
-  def streamAndPathsGen[M[_]: Monad]: Gen[StreamAndPath[M, Int]] =
-    boundedStreamAndPathsGen(None, Some(10)) // TODO hard limit on large testing
-
-  // TODO can I abstract over more than Int
-  // minSize and maxSize must be positive and minSize must be <= maxSize
-  def boundedStreamAndPathsGen[M[_]: Monad](minSize: Option[Int], maxSize: Option[Int]): Gen[StreamAndPath[M, Int]] =
-    Gen.sized { size =>
-      val adjustedSize = size min maxSize.getOrElse(Int.MaxValue) max minSize.getOrElse(0)
-      pathGen(adjustedSize).flatMap { path =>
-        for {
-          s <- Gen.listOfN(adjustedSize, arbInt.arbitrary)
-        } yield StreamAndPath[M, Int](
-          s.map(implicitly[Monad[M]].point(_)).toStream,
-          path,
-          minMax(maxSize.map(_.toLong), minSize.map(_.toLong)))
-      }
-    }
 
 }

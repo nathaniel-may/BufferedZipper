@@ -1,9 +1,8 @@
-package testingUtil
+package util
 
-import scalaz.Monad
-import util.BufferedZipper
 import org.github.jamm.MemoryMeter
-import testingUtil.Directions.{PrevNext, N, P}
+import scalaz.Monad
+import Directions.{N, P, PrevNext}
 
 import scala.collection.immutable.Stream.Empty
 
@@ -20,7 +19,7 @@ object BufferedZipperFunctions {
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
-  def unzipAndMapViaPath[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[PrevNext]): M[List[B]] = {
+  def unzipAndMapViaPathUnsafe[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[PrevNext]): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 

@@ -1,4 +1,4 @@
-package testingUtil
+package util
 
 object Directions {
 
