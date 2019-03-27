@@ -16,6 +16,7 @@ import scalaz.effect.IO
 import BufferedZipperFunctions._
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
+//TODO arch - should test inputs be streams or buffered zippers?
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   // TODO with path so that buffer gets holes in it and focus isn't always at the head
@@ -77,14 +78,13 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //          .tail.forall(_ > 0) }
 //    }
 
-  //TODO these tests are clearly written for streams... but I wrote gens for bufferedzips........
-//  property("buffer is not being used for streams of one or less elements when traversed once forwards") =
-//    forAll(boundedStreamAndPathsGen(Some(0), Some(1)), nonZeroBufferSizeGen(16)) {
-//      (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
-//        BufferedZipper[Id, Int](sp.stream, Some(size.cap))
-//          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], sp.path.steps))
-//          .forall(_ == 0)
-//  }
+  property("buffer is not being used for streams of one or less elements when traversed once forwards") =
+    forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
+      (oi: Option[Int], size: LargerBuffer) =>
+        BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
+          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
+          .forall(_ == 0)
+  }
 
   // TODO change to arbitrary path
   property("buffer never contains the focus when traversed forwards") =
