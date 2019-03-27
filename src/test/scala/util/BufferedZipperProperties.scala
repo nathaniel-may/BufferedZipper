@@ -1,7 +1,7 @@
 package util
 
 // Scalacheck
-import org.scalacheck.Prop.forAll
+import org.scalacheck.Prop.{forAll, forAllNoShrink}
 import org.scalacheck.{Arbitrary, Properties}
 import Generators._
 import BufferTypes._
@@ -70,13 +70,19 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
             measureBufferContents[Id, Int](_) <= size.cap) }
     }
 
-  //TODO arbitrary path
   property("buffer is being used for streams of at least two elements when traversed forwards") =
-    forAll(streamGenSizeAtLeast(2), nonZeroBufferSizeGen(16)) {
-      (s: Stream[Int], size: BufferSize) =>
-        BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
-          .tail.forall(_ > 0) // head won't have any used buffer
+    forAllNoShrink(streamGenSizeAtLeast(2), nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: BufferSize, path: Path) =>
+        BufferedZipper[Id, Int](s, Some(size.cap)).fold[List[Long]](List())(bz => {
+          val (f, b, a) = resultsAcrossDirections[Id, Int, Long](
+            bz,
+            path,
+            measureBufferContents[Id, Int])
+          println(s"forward  : ${f}") // todo
+          println(s"backward : ${b}")
+          println(s"arbitrary: ${a}")
+          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
+        }).forall(_ > 0)
     }
 
   //TODO arbitrary path
@@ -86,7 +92,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
           .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
           .forall(_ == 0)
-  }
+    }
 
   // TODO change to arbitrary path
   property("buffer never contains the focus when traversed forwards") =
