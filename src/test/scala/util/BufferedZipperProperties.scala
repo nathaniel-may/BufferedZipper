@@ -106,14 +106,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
             path,
             (bs: BufferedZipper[Id, Int]) => !bufferContains(bs, bs.focus)) }
     }
-
-  // TODO change to arbitrary path
+  
   property("buffer limit is never exceeded when traversed forwards") =
-    forAll(intStreamGen, nonZeroBufferSizeGen(16)) {
-      (s: Stream[Int], size: LargerBuffer) =>
+    forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold[List[Long]](List())(unzipAndMap[Id, Int, Long](Forwards, _, measureBufferContents[Id, Int]))
-          .forall(_ <= size.cap)
+          .fold(true)(assertAcrossDirections[Id, Int](_, path, measureBufferContents[Id, Int](_) <= size.cap))
     }
  
   // TODO replace var with state monad
