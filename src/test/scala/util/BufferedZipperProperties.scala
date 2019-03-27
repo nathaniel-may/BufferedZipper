@@ -18,6 +18,7 @@ import PropertyHelpers._
 //TODO add test that buffer size should only increase for ints
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //TODO arch - should test inputs be streams or buffered zippers?
+//TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   // TODO with path so that buffer gets holes in it and focus isn't always at the head

@@ -8,7 +8,7 @@ import org.github.jamm.MemoryMeter
 case class BufferedZipper[M[_]: Monad, A] private(buffer: VectorBuffer[A], zipper: Zipper[M[A]], focus: A){
   private val monadSyntax = implicitly[Monad[M]].monadSyntax
   import monadSyntax._
-  // TODO sizing buffer should maybe sometimes INCLUDE focus?
+
   val index: Int = zipper.index
   def next: Option[M[BufferedZipper[M, A]]] = zipper.next.map { zNext =>
     shiftTo(zNext, buffer => if(buffer.size <= index) buffer.append(focus) else buffer.evict(zNext.index).updated(index, focus)) }
@@ -24,7 +24,7 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: VectorBuffer[A], zippe
   def toStream: Stream[M[A]] = zipper.toStream
 
   /**
-    * Traverses from the current position all the way to the left, all the right then reverses the output.
+    * Traverses from the current position all the way to the left, all the way right then reverses the output.
     * This implementation aims to minimize the total effects from M by reusing what is in the buffer rather
     * than minimize traversals.
     */
@@ -118,7 +118,6 @@ object VectorBuffer {
   object L extends LR
   object R extends LR
 
-  //TODO does it measure in bytes?
   def apply[T](limitBytes: Option[Long]): VectorBuffer[T] =
     new VectorBuffer(
       Vector(),
@@ -127,18 +126,19 @@ object VectorBuffer {
   def reverseIndices[T](v: Vector[T]): Range = v.size-1 to 0 by -1
 
   private[util] def shrinkToMax[T](vb: VectorBuffer[T], lr: LR): VectorBuffer[T] =
-    vb.stats.map(_ => lr match {
-      case _ if vb.stats.forall(_.withinMax) => vb
-      case _ if vb.v.forall(_.isEmpty)       => vb
-      case L => shrinkToMax(vb.shrinkLeft)(lr)
+    vb.stats.fold(vb) { stats => lr match {
+      case _ if stats.withinMax        => vb
+      case _ if vb.v.forall(_.isEmpty) => vb
+      case L => shrinkToMax(vb.shrinkLeft)(L)
       case R => shrinkToMax(vb.shrinkRight)(R)
-    }).getOrElse(vb)
+    } }
 
   // if it has stats, shrink it if it's not already within its max
+  // because the focus is not counted in the buffersize, the buffer is not being disregarded
+  // by shrinking afterwards
   private[util] def shrinkToMax[T](newVB: VectorBuffer[T]): LR => VectorBuffer[T] =
     lr => newVB.stats
-      .map { stats => if (stats.withinMax) newVB else shrinkToMax(newVB, lr) }
-      .getOrElse(newVB)
+      .fold(newVB) { stats => if (stats.withinMax) newVB else shrinkToMax(newVB, lr) }
 
   private[util] def insertedLeft[T](v: Vector[Option[T]], elem: T): Option[Vector[Option[T]]] =
     insertedFrom(v, elem, reverseIndices(v).toList)
@@ -151,7 +151,6 @@ object VectorBuffer {
     case _ :: is                               => insertedFrom(v, elem, is)
     case Nil                                   => None
   }
-
 }
 
 private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: Long) {
@@ -163,20 +162,4 @@ private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: L
 
 object BufferStats {
   val meter = new MemoryMeter
-}
-
-// TODO what is the meter really measuring in? remember this is measuring all the weird java things like locks and stuff.
-object M {
-  def main(args: Array[String]): Unit = {
-    val meter = new MemoryMeter
-    val byte:  Byte  = 0
-    val short: Short = 5
-    val int:   Int   = 5
-    val long:  Long  = 5L
-
-    println(s"byte:  ${meter.measureDeep(byte)}")
-    println(s"short: ${meter.measureDeep(short)}")
-    println(s"int:   ${meter.measureDeep(int)}")
-    println(s"long:  ${meter.measureDeep(long)}")
-  }
 }
