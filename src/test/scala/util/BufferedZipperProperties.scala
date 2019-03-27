@@ -60,13 +60,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   // TODO measureBufferContents is exponential
-//  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-//    implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
-//    (sp: StreamAndPaths[Id, Int], size: BufferSize) => forAll(sp.pathGen) { path: Path =>
-//      BufferedZipper[Id, Int](sp.stream, size.max)
-//        .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
-//        .forall(_ <= size.max.get) }
-//  }
+  //TODO arbitrary path
+  property("buffer limit is never exceeded when traversed forwards") =
+    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
+      (s: Stream[Int], size: BufferSize) =>
+        BufferedZipper[Id, Int](s, Some(size.cap))
+          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
+          .forall(_ <= size.cap)
+    }
 
   //TODO arbitrary path
   property("buffer is being used for streams of at least two elements when traversed forwards") =
