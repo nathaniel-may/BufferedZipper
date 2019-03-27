@@ -89,21 +89,22 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
 //        }).forall(_ > 0)
 //    }
-  
-  property("buffer is not being used for streams of one or less elements when traversed once forwards") =
+
+  property("buffer is not being used for streams of one or less elements") =
     forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16), pathGen) {
       (oi: Option[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
           .fold(true) { bz => assertAcrossDirections[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
 
-  // TODO change to arbitrary path
-  property("buffer never contains the focus when traversed forwards") =
-    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16)) {
-      (s: Stream[Int], size: LargerBuffer) =>
+  property("buffer never contains the focus") =
+    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper(s, Some(size.cap))
-          .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Forwards, in, bs => bufferContains(bs, bs.focus)))
-          .forall(_ == false)
+          .fold(true) { in => assertAcrossDirections[Id, Int](
+            in,
+            path,
+            (bs: BufferedZipper[Id, Int]) => !bufferContains(bs, bs.focus)) }
     }
 
   // TODO change to arbitrary path
