@@ -15,6 +15,8 @@ import BufferedZipperFunctions._
 import PropertyHelpers._
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
+//TODO add test that buffer size should only increase for ints
+//TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //TODO arch - should test inputs be streams or buffered zippers?
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
