@@ -38,14 +38,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("list of elements unzipped forwards is the same as the input regardless of buffer limit") =
-    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, flexibleBufferSizeGen) {
+    forAll(intStreamGen, flexibleBufferSizeGen) {
       (inStream: Stream[Int], size: FlexibleBuffer) =>
         BufferedZipper[Id, Int](inStream, Some(size.cap))
           .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
     }
 
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") =
-    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, flexibleBufferSizeGen) {
+    forAll(intStreamGen, flexibleBufferSizeGen) {
       (inStream: Stream[Int], size: FlexibleBuffer) =>
         BufferedZipper[Id, Int](inStream, Some(size.cap))
           .fold(inStream.isEmpty)(toList(Backwards, _) == inStream.toList)
@@ -62,7 +62,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   // TODO measureBufferContents is exponential
   //TODO arbitrary path
   property("buffer limit is never exceeded when traversed forwards") =
-    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
+    forAll(intStreamGen, nonZeroBufferSizeGen(16)) {
       (s: Stream[Int], size: BufferSize) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
           .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
@@ -98,7 +98,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   // TODO change to arbitrary path
   property("buffer limit is never exceeded when traversed forwards") =
-    forAll(implicitly[Arbitrary[Stream[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
+    forAll(intStreamGen, nonZeroBufferSizeGen(16)) {
       (s: Stream[Int], size: LargerBuffer) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
           .fold[List[Long]](List())(unzipAndMap[Id, Int, Long](Forwards, _, measureBufferContents[Id, Int]))

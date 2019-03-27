@@ -10,6 +10,8 @@ import Directions.{Next, Prev, PrevNext}
 
 object Generators {
 
+  val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
+
   val finiteIntStreamGen: Gen[Stream[Int]] = Gen.sized { size =>
     Gen.containerOfN[Stream, Int](size, Arbitrary.arbInt.arbitrary)
   }
