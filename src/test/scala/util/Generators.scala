@@ -4,6 +4,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalaz.Monad
 import scalaz.effect.IO
 import scalaz.Id
+import scalaz._, Scalaz._ //TODO minimize
 import BufferTypes._
 import Directions.{Next, Prev, PrevNext}
 
@@ -37,6 +38,11 @@ object Generators {
   def bZipGenMax[M[_]: Monad, A](maxSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[M[BufferedZipper[M, A]]] =
     streamGenMax[M, A](maxSize)(implicitly[Monad[M]], evsa, eva)
       .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, Some(buff.cap)).get } }
+
+  private lazy val largeListOfInts = (0 to 300000).toList
+  val uniqueIntStreamGen: Gen[Stream[Int]] = Gen.sized { size =>
+    Gen.pick(size, largeListOfInts).flatMap(_.toStream)
+  }
 
   private def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
     evsa.flatMap { s => Gen.pick(2, eva, eva).map(x => x.toStream #::: s) }

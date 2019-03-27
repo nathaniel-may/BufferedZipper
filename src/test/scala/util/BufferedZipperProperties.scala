@@ -85,15 +85,16 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], sp.path.steps))
 //          .forall(_ == 0)
 //  }
-//
-//  // TODO is this using a unique stream?
-//  property("buffer never contains the focus") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
-//    (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
-//      BufferedZipper(sp.stream, Some(size.cap))
-//        .fold[List[Boolean]](List())(in => unzipAndMapViaPath[Id, Int, Boolean](in, bs => bufferContains(bs, bs.focus), sp.path.steps))
-//        .forall(_ == false)
-//  }
-//
+  
+  // TODO change to arbitrary path
+  property("buffer never contains the focus when traversed forwards") =
+    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16)) {
+      (s: Stream[Int], size: LargerBuffer) =>
+        BufferedZipper(s, Some(size.cap))
+          .fold[List[Boolean]](List())(in => unzipAndMap[Id, Int, Boolean](Forwards, in, bs => bufferContains(bs, bs.focus)))
+          .forall(_ == false)
+    }
+
 //  property("buffer limit is never exceeded") = forAll(streamAndPathsGen, nonZeroBufferSizeGen(16)) {
 //    (sp: StreamAndPath[Id, Int], size: LargerBuffer) =>
 //      BufferedZipper[Id, Int](sp.stream, Some(size.cap))
