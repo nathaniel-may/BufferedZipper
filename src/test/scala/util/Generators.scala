@@ -1,14 +1,18 @@
 package util
 
+// Scalacheck
 import org.scalacheck.{Arbitrary, Gen}
+
+// Scala
 import scalaz.Monad
-import scalaz.effect.IO
-import scalaz.Id
-import scalaz._, Scalaz._ //TODO minimize
+
+// Project
 import BufferTypes._
 import Directions.{Next, Prev, PrevNext}
 
 object Generators {
+
+  type Path = Stream[PrevNext]
 
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
 
@@ -61,15 +65,15 @@ object Generators {
     }
   }
 
+  val pathGen: Gen[Stream[PrevNext]] = Gen.listOf(
+    Gen.pick(1, List(Next, Next, Prev)).flatMap(_.head))
+      .flatMap(_.toStream)
+
   private def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
     evsa.flatMap { s => Gen.pick(2, eva, eva).map(x => x.toStream #::: s) }
       .map(_.map(a => implicitly[Monad[M]].point(a)))
 
   private def streamGenMax[M[_]: Monad, A](maxSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
     evsa.flatMap(s => Gen.pick(1, eva, eva).map { _.head #:: s.take(maxSize) } ).map(_.map(a => implicitly[Monad[M]].point(a)))
-
-  private def pathGen(streamLength: Int): Gen[Stream[PrevNext]] = Gen.sized { size =>
-    Gen.pick(size, List(Next, Next, Prev)).map(_.toStream)
-  }
 
 }

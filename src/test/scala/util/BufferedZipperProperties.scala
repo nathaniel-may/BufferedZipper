@@ -2,18 +2,17 @@ package util
 
 // Scalacheck
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen, Properties, Test}
-import Arbitrary.{arbLong, arbOption}
+import org.scalacheck.{Arbitrary, Properties}
 import Generators._
 import BufferTypes._
 
 // Scala
-import scalaz.Monad
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
 
 // Project
 import BufferedZipperFunctions._
+import PropertyHelpers._
 
 //TODO add test for buffer eviction in the correct direction ....idk how.
 //TODO arch - should test inputs be streams or buffered zippers?
@@ -31,6 +30,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
   }
 
+  // TODO redundant test?
   property("list of elements unzipped forwards is the same as the input with a small buffer limit") =
     forAll(finiteIntStreamGen, cappedBufferSizeGen(300L)) {
       (inStream: Stream[Int], size: CappedBuffer) => BufferedZipper[Id, Int](inStream, Some(size.cap))
@@ -60,13 +60,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   // TODO measureBufferContents is exponential
-  //TODO arbitrary path
-  property("buffer limit is never exceeded when traversed forwards") =
-    forAll(intStreamGen, nonZeroBufferSizeGen(16)) {
-      (s: Stream[Int], size: BufferSize) =>
+  property("buffer limit is never exceeded") =
+    forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: BufferSize, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
-          .forall(_ <= size.cap)
+          .fold(true) { bz => assertAcrossDirections[Id, Int](
+            bz,
+            path,
+            measureBufferContents[Id, Int](_) <= size.cap) }
     }
 
   //TODO arbitrary path
@@ -107,7 +108,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
  
   // TODO replace var with state monad
   property("effect only takes place when focus called with a stream of one element regardless of buffer size") =
-    forAll(implicitly[Arbitrary[Short]].arbitrary, flexibleBufferSizeGen){
+    forAll(implicitly[Arbitrary[Short]].arbitrary, flexibleBufferSizeGen) {
       (elem: Short, size: FlexibleBuffer) => {
         var outsideState: Long = 0
         val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })

@@ -19,14 +19,14 @@ object BufferedZipperFunctions {
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
-  def unzipAndMapViaPathUnsafe[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[PrevNext]): M[List[B]] = {
+  def unzipAndMapViaPath[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[PrevNext]): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
+    // if the path walks off the zipper it keeps evaluating till it walks back on
     def go(z: BufferedZipper[M, A], steps: Stream[PrevNext], l: M[List[B]]): M[List[B]] = steps match {
-      case p #:: ps => (p match {case _: N => z.next; case _: P => z.prev}).fold(
-                          throw new Exception("GENERATED PATH WALKED OFF THE ZIPPER. FIX THE PATH GEN."))(
-                          mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))))
+      case p #:: ps => (p match {case _: N => z.next; case _: P => z.prev})
+        .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
       case Empty => l
     }
 
