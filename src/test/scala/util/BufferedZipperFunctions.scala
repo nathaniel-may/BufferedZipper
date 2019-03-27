@@ -19,7 +19,7 @@ object BufferedZipperFunctions {
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
 
-  def unzipAndMapViaPath[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B, path: Stream[PrevNext]): M[List[B]] = {
+  def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[PrevNext], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
