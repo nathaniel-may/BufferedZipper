@@ -17,6 +17,7 @@ import PropertyHelpers._
 //TODO add test for buffer eviction in the correct direction ....idk how.
 //TODO add test that buffer size should only increase for ints
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
+//     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
 //TODO arch - should test inputs be streams or buffered zippers?
 //TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
 object BufferedZipperProperties extends Properties("BufferedZipper") {
@@ -73,7 +74,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
             measureBufferContents[Id, Int](_) <= size.cap) }
     }
 
-  property("buffer is being used for streams of at least two elements when traversed forwards") =
+  property("buffer is being used for streams of at least two elements") =
     forAllNoShrink(streamGenSizeAtLeast(2), nonZeroBufferSizeGen(16), pathGen) {
       (s: Stream[Int], size: BufferSize, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap)).fold[List[Long]](List())(bz => {
