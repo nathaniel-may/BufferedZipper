@@ -89,14 +89,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
 //        }).forall(_ > 0)
 //    }
-
-  //TODO arbitrary path
+  
   property("buffer is not being used for streams of one or less elements when traversed once forwards") =
-    forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
-      (oi: Option[Int], size: LargerBuffer) =>
+    forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16), pathGen) {
+      (oi: Option[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
-          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
-          .forall(_ == 0)
+          .fold(true) { bz => assertAcrossDirections[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
 
   // TODO change to arbitrary path
