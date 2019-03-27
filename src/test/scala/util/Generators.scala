@@ -44,6 +44,21 @@ object Generators {
     Gen.pick(size, largeListOfInts).flatMap(_.toStream)
   }
 
+  def streamGenSizeAtLeast(n: Int): Gen[Stream[Int]] = {
+    def go(m: Int, g: Gen[Stream[Int]]): Gen[Stream[Int]] =
+      if (m <= 0) g
+      else go(
+        m - 1,
+        for {
+          s <- g
+          i <- implicitly[Arbitrary[Int]].arbitrary
+        } yield i #:: s)
+
+    Gen.sized { size =>
+      go(n, Gen.resize(size, implicitly[Arbitrary[Stream[Int]]].arbitrary))
+    }
+  }
+
   private def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Gen[Stream[A]], eva: Gen[A]): Gen[Stream[M[A]]] =
     evsa.flatMap { s => Gen.pick(2, eva, eva).map(x => x.toStream #::: s) }
       .map(_.map(a => implicitly[Monad[M]].point(a)))

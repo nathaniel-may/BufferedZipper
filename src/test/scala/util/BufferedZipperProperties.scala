@@ -67,17 +67,17 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 //        .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
 //        .forall(_ <= size.max.get) }
 //  }
-//
-//  //TODO THIS IS THE ONE I WAS WORKING ON
-//  property("buffer is being used for streams of at least two elements") =
-//    forAll(boundedStreamAndPathsGen(Some(2), None), nonZeroBufferSizeGen(16)) {
-//      implicit val params: Test.Parameters = Parameters.default.withMinSize(10)
-//      (sp: StreamAndPaths[Id, Int], nonZeroSize: BufferSize) => forAll(sp.pathGen) { path: Path =>
-//        BufferedZipper[Id, Int](sp.stream, nonZeroSize.max)
-//          .fold[List[Long]](List())(bz => unzipAndMapViaPath(bz, measureBufferContents[Id, Int], path.steps))
-//          .tail.forall(_ > 0) }
-//    }
 
+  //TODO arbitrary path
+  property("buffer is being used for streams of at least two elements when traversed forwards") =
+    forAll(streamGenSizeAtLeast(2), nonZeroBufferSizeGen(16)) {
+      (s: Stream[Int], size: BufferSize) =>
+        BufferedZipper[Id, Int](s, Some(size.cap))
+          .fold[List[Long]](List())(bz => unzipAndMap(Forwards, bz, measureBufferContents[Id, Int]))
+          .tail.forall(_ > 0) // head won't have any used buffer
+    }
+
+  //TODO arbitrary path
   property("buffer is not being used for streams of one or less elements when traversed once forwards") =
     forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16)) {
       (oi: Option[Int], size: LargerBuffer) =>
