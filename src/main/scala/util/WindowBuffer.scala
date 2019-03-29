@@ -68,25 +68,11 @@ trait NoRight[A] extends WindowBuffer[A] {
 }
 
 trait HasLeft[A] extends WindowBuffer[A] {
-  def prev: WindowBuffer[A] = {
-    val (newStorage, newSize) = shrink(focus +: rightStorage, size + WindowBuffer.meter.measureDeep(focus))
-    leftStorage match {
-      case newFocus +: a +: as => MidBuffer(a +: as, newStorage, newFocus, newSize, maxSize)
-      case newFocus +: _       => LeftEndBuffer(newStorage, newFocus, newSize, maxSize)
-      case _ => this // unreachable if all goes well
-    }
-  }
+  def prev: WindowBuffer[A] = moveWithinWindow(WindowBuffer.L)
 }
 
 trait HasRight[A] extends WindowBuffer[A] {
-  def next: WindowBuffer[A] = {
-    val (newStorage, newSize) = shrink(focus +: leftStorage, size + WindowBuffer.meter.measureDeep(focus))
-    leftStorage match {
-      case newFocus +: a +: as => MidBuffer(a +: as, newStorage, newFocus, newSize, maxSize)
-      case newFocus +: _       => RightEndBuffer(newStorage, newFocus, newSize, maxSize)
-      case _ => this // unreachable if all goes well
-    }
-  }
+  def next: WindowBuffer[A] = moveWithinWindow(WindowBuffer.R)
 }
 
 private[util] final case class MidBuffer[A] private (
