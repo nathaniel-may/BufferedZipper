@@ -20,6 +20,7 @@ import PropertyHelpers._
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
 //TODO arch - should test inputs be streams or buffered zippers?
 //TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
+//TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val arbPath: Arbitrary[Path] = Arbitrary(pathGen)

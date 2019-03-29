@@ -163,3 +163,29 @@ private[util] case class BufferStats(maxBufferSize: Long, estimatedBufferSize: L
 object BufferStats {
   val meter = new MemoryMeter
 }
+
+object M {
+  import BufferStats.meter
+
+  trait NP
+  object N extends NP
+  object P extends NP
+
+  def main(args: Array[String]): Unit = {
+    def measure(bz: BufferedZipper[Id, Int]): Long =
+      bz.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
+
+    def go(bz: BufferedZipper[Id, Int], np: List[NP]): Unit = {
+      println(s"Focus: ${bz.focus}, EstBufferSize: ${bz.buffer.stats.get.estimatedBufferSize}, MeasuredBufferSize: ${measure(bz)}, BufferContents: ${bz.buffer.v}")
+      np match {
+        case N :: nps => bz.next.fold(()) { go(_, nps) }
+        case P :: nps => bz.prev.fold(()) { go(_, nps) }
+        case _ => println(s"Focus: ${bz.focus}, EstBufferSize: ${bz.buffer.stats.get.estimatedBufferSize}, MeasuredBufferSize: ${measure(bz)}, BufferContents: ${bz.buffer.v}")
+      }
+    }
+
+    BufferedZipper(Stream(1468352542, 1444746294, 1, 0), Some(224L))
+      .map(go(_, List(N, P, N, P)))
+      .getOrElse(())
+  }
+}
