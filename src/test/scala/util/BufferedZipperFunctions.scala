@@ -14,7 +14,7 @@ object BufferedZipperFunctions {
   object Backwards extends Direction
 
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
-    bs.buffer.toList.map(meter.measureDeep).sum
+    bs.buffer.toList.map(meter.measureDeep).sum - meter.measureDeep(bs.buffer.focus)
 
   def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[PrevNext], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
