@@ -12,10 +12,10 @@ trait WindowBuffer[A] {
   import WindowBuffer.{LR, L, R, meter}
 
   val focus: A
-  protected val rightStorage: Vector[A]
-  protected val leftStorage: Vector[A]
-  protected val size: Long
-  protected val maxSize: Option[Long]
+  private[util] val rightStorage: Vector[A]
+  private[util] val leftStorage: Vector[A]
+  private[util] val size: Long
+  private[util] val maxSize: Option[Long]
 
   def contains(a: A): Boolean = leftStorage.contains(a) || rightStorage.contains(a)
   def toList: List[A] = toVector.toList
