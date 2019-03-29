@@ -20,7 +20,7 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
       case buff: NoRight[A]  => buff.next(nextFocus)
     }, zNext ) } }
 
-  def prev: Option[M[BufferedZipper[M, A]]] = zipper.next.map { zPrev =>
+  def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
     zPrev.focus.map { prevFocus => BufferedZipper[M, A](buffer match {
       case buff: HasLeft[A] => buff.prev
       case buff: NoLeft[A]  => buff.prev(prevFocus)

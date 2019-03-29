@@ -52,10 +52,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") =
     forAll(intStreamGen, flexibleBufferSizeGen) {
       (s: Stream[Int], size: FlexibleBuffer) =>
-        println()
-        println(s"INPUT:     ${s.toList}")
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold(s.isEmpty)(bz => {val l = toList(Backwards, bz); println(s"BACKWARDS: $l"); l} == s.toList)
+          .fold(s.isEmpty)(toList(Backwards, _) == s.toList)
     }
 
   property("next then prev should result in the first element regardless of buffer limit") =
@@ -77,21 +75,17 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
             measureBufferContents[Id, Int](_) <= size.cap) }
     }
 
-  //TODO this property is exposing a bug in buffer eviction
-//  property("buffer is being used for streams of at least two elements") =
-//    forAllNoShrink(streamGenMin[Id, Int](2), nonZeroBufferSizeGen(16), pathGen) {
-//      (s: Stream[Int], size: BufferSize, path: Path) =>
-//        BufferedZipper[Id, Int](s, Some(size.cap)).fold[List[Long]](List())(bz => {
-//          val (f, b, a) = resultsAcrossDirections[Id, Int, Long](
-//            bz,
-//            path,
-//            measureBufferContents[Id, Int])
-//          println(s"forward  : ${f}") // todo
-//          println(s"backward : ${b}")
-//          println(s"arbitrary: ${a}")
-//          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
-//        }).forall(_ > 0)
-//    }
+  property("buffer is being used for streams of at least two elements") =
+    forAllNoShrink(streamGenMin[Id, Int](2), nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: BufferSize, path: Path) =>
+        BufferedZipper[Id, Int](s, Some(size.cap)).fold[List[Long]](List())(bz => {
+          val (f, b, a) = resultsAcrossDirections[Id, Int, Long](
+            bz,
+            path,
+            measureBufferContents[Id, Int])
+          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
+        }).forall(_ > 0)
+    }
 
   property("buffer is not being used for streams of one or less elements") =
     forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16), pathGen) {
