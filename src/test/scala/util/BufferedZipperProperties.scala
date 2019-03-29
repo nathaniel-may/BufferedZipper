@@ -52,8 +52,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("list of elements unzipping from the back is the same as the input regardless of buffer limit") =
     forAll(intStreamGen, flexibleBufferSizeGen) {
       (s: Stream[Int], size: FlexibleBuffer) =>
+        println()
+        println(s"INPUT:     ${s.toList}")
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold(s.isEmpty)(toList(Backwards, _) == s.toList)
+          .fold(s.isEmpty)(bz => {val l = toList(Backwards, bz); println(s"BACKWARDS: $l"); l} == s.toList)
     }
 
   property("next then prev should result in the first element regardless of buffer limit") =
@@ -105,7 +107,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           .fold(s.isEmpty) { in => assertAcrossDirections[Id, Int](
             in,
             path,
-            (bs: BufferedZipper[Id, Int]) => !bufferContains(bs, bs.focus)) }
+            bs => bs.buffer.contains(bs.focus)) }
     }
 
   property("buffer limit is never exceeded") =

@@ -15,18 +15,22 @@ trait WindowBuffer[A] {
   protected val rightStorage: Vector[A]
   protected val leftStorage: Vector[A]
   protected val size: Long
-  protected val maxSize: Long
+  protected val maxSize: Option[Long]
+
+  def contains(a: A): Boolean = leftStorage.contains(a) || rightStorage.contains(a)
+  def toList: List[A] = toVector.toList
+  def toVector: Vector[A] = leftStorage ++: focus +: rightStorage
 
   private[util] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
-    if (size <= maxSize) (storage, size)
+    if (maxSize.fold(true) { size <= _ }) (storage, size)
     else storage.lift(storage.size - 1)
       .fold[(Vector[A], Long)]((Vector(), size)) { a =>
       shrink(storage.tail, size - meter.measureDeep(a)) }
 
   private[util] def shiftWindow(a: A, shift: LR) = {
     val (storage, constructor) = shift match {
-      case L => (rightStorage, LeftEndBuffer.apply(_, _, _, _))
-      case R => (leftStorage, RightEndBuffer.apply(_, _, _, _))
+      case L => (rightStorage, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case R => (leftStorage, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
     }
 
     val (newStorage, newSize) = shrink(focus +: storage, size + WindowBuffer.meter.measureDeep(a))
@@ -36,8 +40,8 @@ trait WindowBuffer[A] {
 
   private[util] def moveWithinWindow(move: LR) = {
     val (farStorage, nearStorage, constructor) = move match {
-      case L => (rightStorage, leftStorage, LeftEndBuffer.apply(_, _, _, _))
-      case R => (leftStorage, rightStorage, RightEndBuffer.apply(_, _, _, _))
+      case L => (rightStorage, leftStorage, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case R => (leftStorage, rightStorage, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
     }
 
     val (newStorage, newSize) = shrink(focus +: farStorage, size + WindowBuffer.meter.measureDeep(focus))
@@ -56,7 +60,7 @@ object WindowBuffer {
   object L extends LR
   object R extends LR
 
-  def apply[A](a: A, maxSize: Long): DoubleEndBuffer[A] = DoubleEndBuffer(a, maxSize)
+  def apply[A](a: A, maxSize: Option[Long]): DoubleEndBuffer[A] = DoubleEndBuffer(a, maxSize)
 }
 
 trait NoLeft[A] extends WindowBuffer[A] {
@@ -80,13 +84,13 @@ private[util] final case class MidBuffer[A] private (
   rightStorage: Vector[A],
   focus:        A,
   size:         Long,
-  maxSize:      Long) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
+  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
 private[util] final case class LeftEndBuffer[A] private (
   rightStorage: Vector[A],
   focus:        A,
   size:         Long,
-  maxSize:      Long) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
+  maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
 
   val leftStorage  = Vector()
 }
@@ -95,7 +99,7 @@ private[util] final case class RightEndBuffer[A] private (
   leftStorage:  Vector[A],
   focus:        A,
   size:         Long,
-  maxSize:      Long) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
+  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
 
   val rightStorage = Vector()
 }
@@ -103,14 +107,14 @@ private[util] final case class RightEndBuffer[A] private (
 private[util] final case class DoubleEndBuffer[A] private (
   focus:   A,
   size:    Long,
-  maxSize: Long) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
+  maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
 
   val leftStorage  = Vector()
   val rightStorage = Vector()
 }
 
 object DoubleEndBuffer {
-  def apply[A](a: A, maxSize: Long): DoubleEndBuffer[A] = {
+  def apply[A](a: A, maxSize: Option[Long]): DoubleEndBuffer[A] = {
     new DoubleEndBuffer[A](a, 0L, maxSize)
   }
 }

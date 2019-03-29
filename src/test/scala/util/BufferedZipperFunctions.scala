@@ -13,11 +13,8 @@ object BufferedZipperFunctions {
   object Forwards  extends Direction
   object Backwards extends Direction
 
-  def bufferContains[M[_]: Monad, A](bs: BufferedZipper[M, A], elem: A): Boolean =
-    bs.buffer.v.contains(Some(elem))
-
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
-    bs.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
+    bs.buffer.toList.map(meter.measureDeep).sum
 
   def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[PrevNext], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
@@ -94,5 +91,4 @@ object BufferedZipperFunctions {
 
     go(path, in, point(List())).map(_.reverse)
   }
-
 }
