@@ -19,13 +19,13 @@ trait WindowBuffer[A] {
 
   def contains(a: A): Boolean = leftStorage.contains(a) || rightStorage.contains(a)
   def toList: List[A] = toVector.toList
-  def toVector: Vector[A] = leftStorage ++: focus +: rightStorage
+  def toVector: Vector[A] = leftStorage.reverse ++: focus +: rightStorage
 
   private[util] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
     if (maxSize.fold(true) { size <= _ }) (storage, size)
     else storage.lift(storage.size - 1)
       .fold[(Vector[A], Long)]((Vector(), size)) { a =>
-      shrink(storage.tail, size - meter.measureDeep(a)) }
+      shrink(storage.init, size - meter.measureDeep(a)) }
 
   private[util] def shiftWindow(a: A, shift: LR) = {
     val (storage, constructor) = shift match {
@@ -46,8 +46,8 @@ trait WindowBuffer[A] {
 
     val (newStorage, newSize) = shrink(focus +: farStorage, size + WindowBuffer.meter.measureDeep(focus))
     nearStorage match {
-      case newFocus +: a +: as => MidBuffer(a +: as, newStorage, newFocus, newSize, maxSize)
-      case newFocus +: _       => constructor(newStorage, newFocus, newSize, maxSize)
+      case newFocus +: IndexedSeq() => constructor(newStorage, newFocus, newSize, maxSize)
+      case newFocus +: as           => MidBuffer(as, newStorage, newFocus, newSize, maxSize)
       case _ => this // unreachable if all goes well
     }
   }

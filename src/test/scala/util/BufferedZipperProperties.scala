@@ -22,6 +22,7 @@ import PropertyHelpers._
 //TODO arch - should test inputs be streams or buffered zippers?
 //TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
+//TODO across unique stream, buffer shouldn't have doubles anywhere
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val arbPath: Arbitrary[Path] = Arbitrary(pathGen)
@@ -97,15 +98,35 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           .fold(oi.isEmpty) { bz => assertAcrossDirections[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
 
-  property("buffer never contains the focus") =
+  property("buffer never has duplicate items") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper(us.s, Some(size.cap))
           .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
             in,
             path,
-            bs => !bs.buffer.contains(bs.focus)) }
+            bs => bs.buffer.toList.groupBy(identity).valuesIterator.size == 1) }
     }
+
+  property("buffer is always a segment of the input") =
+    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+        BufferedZipper(us.s, Some(size.cap))
+          .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
+            in,
+            path,
+            bs => us.s.containsSlice(bs.buffer.toList)) }
+    }
+
+  property("buffer never contains the focus") =
+      forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+        (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+          BufferedZipper(us.s, Some(size.cap))
+            .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
+              in,
+              path,
+              bs => !bs.buffer.contains(bs.focus)) }
+      }
 
   property("buffer limit is never exceeded") =
     forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
