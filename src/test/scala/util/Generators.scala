@@ -45,9 +45,10 @@ object Generators {
     streamGenMax[M, A](maxSize)(implicitly[Monad[M]], evsa, eva)
       .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, Some(buff.cap)).get } }
 
+  case class UniqueStream[T](s: Stream[T])
   private lazy val largeListOfInts = (0 to 300000).toList
-  val uniqueIntStreamGen: Gen[Stream[Int]] = Gen.sized { size =>
-    Gen.pick(size, largeListOfInts).flatMap(_.toStream)
+  val uniqueIntStreamGen: Gen[UniqueStream[Int]] = Gen.sized { size =>
+    Gen.pick(size, largeListOfInts).flatMap(x => UniqueStream(x.toStream))
   }
 
   val pathGen: Gen[Stream[PrevNext]] = Gen.listOf(

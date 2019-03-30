@@ -2,9 +2,10 @@ package util
 
 // Scalacheck
 import org.scalacheck.Prop.{forAll, forAllNoShrink}
-import org.scalacheck.{Arbitrary, Properties}
+import org.scalacheck.{Arbitrary, Properties, Shrink}
 import Generators._
 import BufferTypes._
+import testingUtil.Shrinkers
 
 // Scala
 import scalaz.Scalaz.Id
@@ -24,6 +25,8 @@ import PropertyHelpers._
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val arbPath: Arbitrary[Path] = Arbitrary(pathGen)
+  implicit val shrinkUniqueStream: Shrink[UniqueStream[Int]] = Shrinkers.shrinkUniqueStream[Int]
+
 
   property("to List returns the same as streamInput.toList") = forAll {
     (inStream: Stream[Int], path: Path) => BufferedZipper[Id, Int](inStream, None)
@@ -96,12 +99,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer never contains the focus") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
-      (s: Stream[Int], size: LargerBuffer, path: Path) =>
-        BufferedZipper(s, Some(size.cap))
-          .fold(s.isEmpty) { in => assertAcrossDirections[Id, Int](
+      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+        BufferedZipper(us.s, Some(size.cap))
+          .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
             in,
             path,
-            bs => bs.buffer.contains(bs.focus)) }
+            bs => !bs.buffer.contains(bs.focus)) }
     }
 
   property("buffer limit is never exceeded") =
@@ -140,5 +143,4 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       sameContents && outsideState == inStream.size
     }
   }
-
 }
