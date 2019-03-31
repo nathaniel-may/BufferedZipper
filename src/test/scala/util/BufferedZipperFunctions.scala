@@ -26,10 +26,10 @@ object BufferedZipperFunctions {
         mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
       case P #:: ps => z.prev.fold(go(z, ps, l)) { mbz =>
         mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
-      case Empty => l
+      case Empty => l.map(_.reverse)
     }
 
-    go(zipper, path, point(List()))
+    go(zipper, path, point(List(f(zipper))))
   }
 
   //TODO add to type?

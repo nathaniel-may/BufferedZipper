@@ -94,24 +94,28 @@ object M {
 
       // if the path walks off the zipper it keeps evaluating till it walks back on
       def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]]): M[List[B]] = steps match {
-        case N #:: ps => z.next
-          .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
-        case P #:: ps => z.prev
-          .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
-        case Stream.Empty => l
+        case N #:: ps => z.next.fold(go(z, ps, l)) { mbz =>
+          mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+        case P #:: ps => z.prev.fold(go(z, ps, l)) { mbz =>
+          mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+        case Stream.Empty => l.map(_.reverse)
       }
 
-      go(zipper, path, point(List()))
+      go(zipper, path, point(List(f(zipper))))
     }
 
+//    BufferedZipper(Stream(-6, 231, 53457), Some(224L))
+//      .map(go(_, List(N, N, P, P, N)))
+//      .getOrElse(())
+
     BufferedZipper(Stream(-6, 231, 53457), Some(224L))
-      .map(go(_, List(N, N, P, P, N)))
-      .getOrElse(())
+      .map(unzipAndMapViaPath[Id, Int, String](Stream(N, N, P, P, N), _, getInfo))
+      .map(_.map(println(_)))
   }
 }
 
 object MyTypes {
   sealed trait NP
-  object N extends NP
-  object P extends NP
+  object N extends NP { override def toString: String = "N" }
+  object P extends NP { override def toString: String = "P" }
 }
