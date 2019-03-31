@@ -1,0 +1,18 @@
+version: 2.1
+orbs:
+  codecov: codecov/codecov@1.0.3
+jobs:
+  build:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    steps:
+      - checkout
+      - restore_cache:
+          key: scala-library-dependencies-{{ checksum "build.sbt" }}
+      - run: sbt test:compile
+      - save_cache:
+          paths: [ "~/.m2", "~/.ivy2", "~/.cache/coursier" ]
+          key: scala-library-dependencies-{{ checksum "build.sbt" }}
+      - run: sbt clean coverage test coverageReport
+      - codecov/upload:
+          file: /home/circleci/project/target/scala-2.12/scoverage-report/scoverage.xml
