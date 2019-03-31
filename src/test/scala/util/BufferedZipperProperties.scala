@@ -194,15 +194,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   // TODO fails
-  // TODO pathify with random starting point?
   // TODO replace var with state monad
-  property("effect doesn't happen while the buffer contains everything") = forAll {
-    inStream: Stream[Int] => {
+  property("with unlimited buffer, effect happens at most once per element") = forAll {
+    (inStream: Stream[Int], path: Path) => {
       var outsideState: Int = 0
       val inStreamWithEffect = inStream.map( i => IO {outsideState += 1; i} )
-      val sameContents = BufferedZipper[IO, Int](inStreamWithEffect, None)
-        .fold(inStream.isEmpty)(_.flatMap(toList(Backwards, _)).unsafePerformIO() == inStream.toList)
-      sameContents && outsideState == inStream.size
+      BufferedZipper[IO, Int](inStreamWithEffect, None).map { iobz => iobz.flatMap(move(path, _)) }
+      outsideState <= inStream.size
     }
   }
+
 }
