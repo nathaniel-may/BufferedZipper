@@ -1,7 +1,10 @@
 # rand-pix
 
-TODO
+Refactoring
 - Rename repo and project to BufferedZipper
+- Cleaner way to implement BufferedWindow
+- Add the tests that are currently TODOs
+- Refactor test helpers into something less horrible
 
 Feature Ideas:
 - Support limiting buffer by number of items not just size
