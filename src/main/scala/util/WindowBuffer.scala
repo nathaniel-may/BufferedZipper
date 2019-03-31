@@ -9,7 +9,7 @@ storage: [3, 2, 1, 0]   [0, 1]
 
 
 trait WindowBuffer[A] {
-  import WindowBuffer.{LR, L, R, meter}
+  import WindowBuffer.meter
 
   val focus: A
   private[util] val rights: Vector[A]
@@ -27,27 +27,32 @@ trait WindowBuffer[A] {
       .fold[(Vector[A], Long)]((Vector(), size)) { a =>
       shrink(storage.init, size - meter.measureDeep(a)) }
 
-  private[util] def shiftWindow(a: A, shift: LR) = {
-    val (storage, constructor) = shift match {
-      case L => (rights, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-      case R => (lefts, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-    }
-
-    val (newStorage, newSize) = shrink(focus +: storage, size + WindowBuffer.meter.measureDeep(a))
-    if (newStorage.isEmpty) DoubleEndBuffer(a, maxSize)
-    else constructor(newStorage, a, newSize, maxSize)
+  private[util] def shiftWindowLeft(a: A) = {
+    val (newRights, newSize) = shrink(focus +: rights, size + WindowBuffer.meter.measureDeep(a))
+    if (newRights.isEmpty) DoubleEndBuffer(a, maxSize)
+    else                   LeftEndBuffer(newRights, a, newSize, maxSize)
   }
 
-  private[util] def moveWithinWindow(move: LR) = {
-    val (farStorage, nearStorage, constructor) = move match {
-      case L => (rights, lefts, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-      case R => (lefts, rights, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-    }
+  private[util] def shiftWindowRight(a: A) = {
+    val (newLefts, newSize) = shrink(focus +: lefts, size + WindowBuffer.meter.measureDeep(a))
+    if (newLefts.isEmpty) DoubleEndBuffer(a, maxSize)
+    else                  RightEndBuffer(newLefts, a, newSize, maxSize)
+  }
 
-    val (newStorage, newSize) = shrink(focus +: farStorage, size + WindowBuffer.meter.measureDeep(focus))
-    nearStorage match {
-      case newFocus +: IndexedSeq() => constructor(newStorage, newFocus, newSize, maxSize)
-      case newFocus +: as           => MidBuffer(as, newStorage, newFocus, newSize, maxSize)
+  private[util] def moveLeftWithinWindow = {
+    val (newRights, newSize) = shrink(focus +: rights, size + WindowBuffer.meter.measureDeep(focus))
+    lefts match {
+      case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, maxSize)
+      case newFocus +: as           => MidBuffer(as, newRights, newFocus, newSize, maxSize)
+      case _ => this // unreachable if all goes well
+    }
+  }
+
+  private[util] def moveRightWithinWindow = {
+    val (newLefts, newSize) = shrink(focus +: lefts, size + WindowBuffer.meter.measureDeep(focus))
+    rights match {
+      case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, maxSize)
+      case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newSize, maxSize)
       case _ => this // unreachable if all goes well
     }
   }
@@ -62,27 +67,23 @@ trait WindowBuffer[A] {
 object WindowBuffer {
   val meter = new MemoryMeter
 
-  trait LR
-  object L extends LR
-  object R extends LR
-
   def apply[A](a: A, maxSize: Option[Long]): DoubleEndBuffer[A] = DoubleEndBuffer(a, maxSize)
 }
 
 trait NoLeft[A] extends WindowBuffer[A] {
-  def prev(a: A): WindowBuffer[A] = shiftWindow(a, WindowBuffer.L)
+  def prev(a: A): WindowBuffer[A] = shiftWindowLeft(a)
 }
 
 trait NoRight[A] extends WindowBuffer[A] {
-  def next(a: A): WindowBuffer[A] = shiftWindow(a, WindowBuffer.R)
+  def next(a: A): WindowBuffer[A] = shiftWindowRight(a)
 }
 
 trait HasLeft[A] extends WindowBuffer[A] {
-  def prev: WindowBuffer[A] = moveWithinWindow(WindowBuffer.L)
+  def prev: WindowBuffer[A] = moveLeftWithinWindow
 }
 
 trait HasRight[A] extends WindowBuffer[A] {
-  def next: WindowBuffer[A] = moveWithinWindow(WindowBuffer.R)
+  def next: WindowBuffer[A] = moveRightWithinWindow
 }
 
 private[util] final case class MidBuffer[A] private (
