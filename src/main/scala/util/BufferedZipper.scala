@@ -61,28 +61,57 @@ object BufferStats {
   val meter = new MemoryMeter
 }
 
-//object M {
-//  import BufferStats.meter
-//
-//  trait NP
-//  object N extends NP
-//  object P extends NP
-//
-//  def main(args: Array[String]): Unit = {
+object M {
+  import BufferStats.meter
+
+  def main(args: Array[String]): Unit = {
+    import MyTypes._
+
 //    def measure(bz: BufferedZipper[Id, Int]): Long =
 //      bz.buffer.v.map(_.fold(0L)(meter.measureDeep)).fold(0L)(_ + _)
-//
-//    def go(bz: BufferedZipper[Id, Int], np: List[NP]): Unit = {
-//      println(s"Focus: ${bz.focus}, EstBufferSize: ${bz.buffer.stats.get.estimatedBufferSize}, MeasuredBufferSize: ${measure(bz)}, BufferContents: ${bz.buffer.v}")
-//      np match {
-//        case N :: nps => bz.next.fold(()) { go(_, nps) }
-//        case P :: nps => bz.prev.fold(()) { go(_, nps) }
-//        case _ => println(s"Focus: ${bz.focus}, EstBufferSize: ${bz.buffer.stats.get.estimatedBufferSize}, MeasuredBufferSize: ${measure(bz)}, BufferContents: ${bz.buffer.v}")
-//      }
-//    }
-//
-//    BufferedZipper(Stream(1468352542, 1444746294, 1, 0), Some(224L))
-//      .map(go(_, List(N, P, N, P)))
-//      .getOrElse(())
-//  }
-//}
+    def getInfo(bz: BufferedZipper[Id, Int]): String =
+      s"Focus: ${bz.focus}, BufferType: ${getBufferType(bz.buffer)}, BufferContents: ${bz.buffer}"
+
+    def getBufferType[A](buff: WindowBuffer[A]) = buff match {
+      case DoubleEndBuffer(_, _, _)   => "DoubleEndBuffer"
+      case LeftEndBuffer(_, _, _, _)  => "LeftEndBuffer"
+      case MidBuffer(_, _, _, _, _)   => "MidBuffer"
+      case RightEndBuffer(_, _, _, _) => "RightEndBuffer"
+    }
+
+    def go(bz: BufferedZipper[Id, Int], np: List[NP]): Unit = {
+      println(getInfo(bz))
+      np match {
+        case N :: nps => bz.next.fold(go(bz, nps)) { go(_, nps) }
+        case P :: nps => bz.prev.fold(go(bz, nps)) { go(_, nps) }
+        case _        => println()
+      }
+    }
+
+    def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[NP], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
+      val monadSyntax = implicitly[Monad[M]].monadSyntax
+      import monadSyntax._
+
+      // if the path walks off the zipper it keeps evaluating till it walks back on
+      def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]]): M[List[B]] = steps match {
+        case N #:: ps => z.next
+          .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+        case P #:: ps => z.prev
+          .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+        case Stream.Empty => l
+      }
+
+      go(zipper, path, point(List()))
+    }
+
+    BufferedZipper(Stream(-6, 231, 53457), Some(224L))
+      .map(go(_, List(N, N, P, P, N)))
+      .getOrElse(())
+  }
+}
+
+object MyTypes {
+  sealed trait NP
+  object N extends NP
+  object P extends NP
+}

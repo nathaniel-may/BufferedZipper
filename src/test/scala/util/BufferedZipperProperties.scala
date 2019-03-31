@@ -22,7 +22,6 @@ import PropertyHelpers._
 //TODO arch - should test inputs be streams or buffered zippers?
 //TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
-//TODO across unique stream, buffer shouldn't have doubles anywhere
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val arbPath: Arbitrary[Path] = Arbitrary(pathGen)
@@ -73,7 +72,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (s: Stream[Int], size: BufferSize, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold(s.isEmpty) { bz => assertAcrossDirections[Id, Int](
+          .fold(s.isEmpty) { bz => assertOnPath[Id, Int](
             bz,
             path,
             measureBufferContents[Id, Int](_) <= size.cap) }
@@ -83,11 +82,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAllNoShrink(streamGenMin[Id, Int](2), nonZeroBufferSizeGen(16), pathGen) {
       (s: Stream[Int], size: BufferSize, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap)).fold[List[Long]](List())(bz => {
-          val (f, b, a) = resultsAcrossDirections[Id, Int, Long](
+          resultsOnPath[Id, Int, Long](
             bz,
             path,
-            measureBufferContents[Id, Int])
-          f.drop(1) ::: b.drop(1) ::: a.drop(1) //instead of nonExistent `tailOption`
+            measureBufferContents[Id, Int]).drop(1)
         }).forall(_ > 0)
     }
 
@@ -95,44 +93,86 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, nonZeroBufferSizeGen(16), pathGen) {
       (oi: Option[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
-          .fold(oi.isEmpty) { bz => assertAcrossDirections[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
+          .fold(oi.isEmpty) { bz => assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
 
+  // TODO fails
   property("buffer never has duplicate items") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper(us.s, Some(size.cap))
-          .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
+          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
             in,
             path,
-            bs => bs.buffer.toList.groupBy(identity).valuesIterator.size == 1) }
+            bs => bs.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1)) }
     }
 
+  // TODO fails
+//  property("buffer is always a segment of the input") =
+  //    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+  //      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+  //        BufferedZipper(us.s, Some(size.cap))
+  //          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
+  //            in,
+  //            path,
+  //            bs => us.s.containsSlice(bs.buffer.toList)) }
+  //    }
+
+  case class Debug(passing: Boolean, input: List[Int], bufferContents: String, bufferType: String) {
+    override def toString: String = s"Passing: $passing\nInput:   $input\nBuffer:  $bufferContents\nType:    $bufferType\n"
+  }
   property("buffer is always a segment of the input") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
-        BufferedZipper(us.s, Some(size.cap))
-          .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
+        val debugs = BufferedZipper(us.s, Some(size.cap))
+          .fold[List[Debug]](List()) { in => Debug(
+              us.s.containsSlice(in.buffer.toList),
+              us.s.toList,
+              s"${in.buffer}",
+              in.buffer match {
+                case DoubleEndBuffer(_, _, _)   => "DoubleEndBuffer"
+                case LeftEndBuffer(_, _, _, _)  => "LeftEndBuffer"
+                case MidBuffer(_, _, _, _, _)   => "MidBuffer"
+                case RightEndBuffer(_, _, _, _) => "RightEndBuffer"
+              }
+            ) :: resultsOnPath[Id, Int, Debug](
             in,
             path,
-            bs => us.s.containsSlice(bs.buffer.toList)) }
+            bs => Debug(
+              us.s.containsSlice(bs.buffer.toList),
+              us.s.toList,
+              s"${bs.buffer}",
+              bs.buffer match {
+                case DoubleEndBuffer(_, _, _)   => "DoubleEndBuffer"
+                case LeftEndBuffer(_, _, _, _)  => "LeftEndBuffer"
+                case MidBuffer(_, _, _, _, _)   => "MidBuffer"
+                case RightEndBuffer(_, _, _, _) => "RightEndBuffer"
+              }
+            )) }
+          .zip(path)
+        if (debugs.exists(!_._1.passing)) {
+          debugs.map(println(_))
+          println("-------------------------- TEST END --------------------------")
+        }
+        debugs.forall(_._1.passing)
     }
 
+  // TODO fails
   property("buffer never contains the focus") =
-      forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
-        (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
-          BufferedZipper(us.s, Some(size.cap))
-            .fold(us.s.isEmpty) { in => assertAcrossDirections[Id, Int](
-              in,
-              path,
-              bs => !bs.buffer.contains(bs.focus)) }
-      }
+    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+        BufferedZipper(us.s, Some(size.cap))
+          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
+            in,
+            path,
+            bs => !bs.buffer.contains(bs.focus)) }
+    }
 
   property("buffer limit is never exceeded") =
     forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (s: Stream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold(s.isEmpty) { assertAcrossDirections[Id, Int](_, path, measureBufferContents[Id, Int](_) <= size.cap) }
+          .fold(s.isEmpty) { assertOnPath[Id, Int](_, path, measureBufferContents[Id, Int](_) <= size.cap) }
     }
  
   // TODO replace var with state monad
@@ -153,6 +193,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       }
     }
 
+  // TODO fails
   // TODO pathify with random starting point?
   // TODO replace var with state monad
   property("effect doesn't happen while the buffer contains everything") = forAll {

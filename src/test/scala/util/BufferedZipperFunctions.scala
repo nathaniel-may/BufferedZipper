@@ -2,7 +2,7 @@ package util
 
 import org.github.jamm.MemoryMeter
 import scalaz.Monad
-import Directions.{N, P, PrevNext}
+import Directions.{N, P, NP}
 
 import scala.collection.immutable.Stream.Empty
 
@@ -16,14 +16,16 @@ object BufferedZipperFunctions {
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.toList.map(meter.measureDeep).sum - meter.measureDeep(bs.buffer.focus)
 
-  def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[PrevNext], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
+  def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[NP], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
     // if the path walks off the zipper it keeps evaluating till it walks back on
-    def go(z: BufferedZipper[M, A], steps: Stream[PrevNext], l: M[List[B]]): M[List[B]] = steps match {
-      case p #:: ps => (p match {case _: N => z.next; case _: P => z.prev})
-        .fold(go(z, ps, l)) { mbz => mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+    def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]]): M[List[B]] = steps match {
+      case N #:: ps => z.next.fold(go(z, ps, l)) { mbz =>
+        mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
+      case P #:: ps => z.prev.fold(go(z, ps, l)) { mbz =>
+        mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
       case Empty => l
     }
 
@@ -79,14 +81,14 @@ object BufferedZipperFunctions {
     goToEnd(in).flatMap(x => go(x, point(List())))
   }
 
-  private def mapAlong[M[_] : Monad, A, B](path: Stream[PrevNext])(in: BufferedZipper[M, A], f: A => B) : M[List[B]] = {
+  private def mapAlong[M[_] : Monad, A, B](path: Stream[NP])(in: BufferedZipper[M, A], f: A => B) : M[List[B]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
-    def go(p: Stream[PrevNext], z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] = p match {
+    def go(p: Stream[NP], z: BufferedZipper[M, A], l: M[List[B]]): M[List[B]] = p match {
       case Empty            => l
-      case (_: N) #:: steps => z.next.fold(l)(mn => mn.flatMap(n => go(steps, n, l.map(f(n.focus) :: _))))
-      case (_: P) #:: steps => z.prev.fold(l)(mp => mp.flatMap(p => go(steps, p, l.map(f(p.focus) :: _))))
+      case N #:: steps => z.next.fold(l)(mn => mn.flatMap(n => go(steps, n, l.map(f(n.focus) :: _))))
+      case P #:: steps => z.prev.fold(l)(mp => mp.flatMap(p => go(steps, p, l.map(f(p.focus) :: _))))
     }
 
     go(path, in, point(List())).map(_.reverse)

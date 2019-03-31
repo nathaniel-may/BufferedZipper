@@ -8,11 +8,11 @@ import scalaz.Monad
 
 // Project
 import BufferTypes._
-import Directions.{Next, Prev, PrevNext}
+import Directions.{N, P, NP}
 
 object Generators {
 
-  type Path = Stream[PrevNext]
+  type Path = Stream[NP]
 
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
 
@@ -51,8 +51,8 @@ object Generators {
     Gen.pick(size, largeListOfInts).flatMap(x => UniqueStream(x.toStream))
   }
 
-  val pathGen: Gen[Stream[PrevNext]] = Gen.listOf(
-    Gen.pick(1, List(Next, Next, Prev)).flatMap(_.head))
+  val pathGen: Gen[Stream[NP]] = Gen.listOf(
+    Gen.pick(1, List(N, N, P)).flatMap(_.head))
       .flatMap(_.toStream)
 
   def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {

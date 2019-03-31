@@ -12,14 +12,14 @@ trait WindowBuffer[A] {
   import WindowBuffer.{LR, L, R, meter}
 
   val focus: A
-  private[util] val rightStorage: Vector[A]
-  private[util] val leftStorage: Vector[A]
+  private[util] val rights: Vector[A]
+  private[util] val lefts: Vector[A]
   private[util] val size: Long
   private[util] val maxSize: Option[Long]
 
-  def contains(a: A): Boolean = leftStorage.contains(a) || rightStorage.contains(a)
+  def contains(a: A): Boolean = lefts.contains(a) || rights.contains(a)
   def toList: List[A] = toVector.toList
-  def toVector: Vector[A] = leftStorage.reverse ++: focus +: rightStorage
+  def toVector: Vector[A] = lefts.reverse ++: focus +: rights
 
   private[util] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
     if (maxSize.fold(true) { size <= _ }) (storage, size)
@@ -29,8 +29,8 @@ trait WindowBuffer[A] {
 
   private[util] def shiftWindow(a: A, shift: LR) = {
     val (storage, constructor) = shift match {
-      case L => (rightStorage, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-      case R => (leftStorage, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case L => (rights, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case R => (lefts, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
     }
 
     val (newStorage, newSize) = shrink(focus +: storage, size + WindowBuffer.meter.measureDeep(a))
@@ -40,8 +40,8 @@ trait WindowBuffer[A] {
 
   private[util] def moveWithinWindow(move: LR) = {
     val (farStorage, nearStorage, constructor) = move match {
-      case L => (rightStorage, leftStorage, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
-      case R => (leftStorage, rightStorage, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case L => (rights, lefts, LeftEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
+      case R => (lefts, rights, RightEndBuffer.apply(_: Vector[A], _: A, _: Long, _: Option[Long]))
     }
 
     val (newStorage, newSize) = shrink(focus +: farStorage, size + WindowBuffer.meter.measureDeep(focus))
@@ -50,6 +50,12 @@ trait WindowBuffer[A] {
       case newFocus +: as           => MidBuffer(as, newStorage, newFocus, newSize, maxSize)
       case _ => this // unreachable if all goes well
     }
+  }
+
+  override def toString: String = {
+    def left = if (lefts.isEmpty) "" else lefts.reverse.mkString("", ", ", " ")
+    def right = if (rights.isEmpty) "" else rights.mkString(" ", ", ", "")
+    s"WindowBuffer: [$left-> $focus <-$right]"
   }
 }
 
@@ -80,28 +86,28 @@ trait HasRight[A] extends WindowBuffer[A] {
 }
 
 private[util] final case class MidBuffer[A] private (
-  leftStorage:  Vector[A],
-  rightStorage: Vector[A],
+  lefts:  Vector[A],
+  rights: Vector[A],
   focus:        A,
   size:         Long,
   maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
 private[util] final case class LeftEndBuffer[A] private (
-  rightStorage: Vector[A],
+  rights: Vector[A],
   focus:        A,
   size:         Long,
   maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
 
-  val leftStorage  = Vector()
+  val lefts  = Vector()
 }
 
 private[util] final case class RightEndBuffer[A] private (
-  leftStorage:  Vector[A],
-  focus:        A,
-  size:         Long,
-  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
+   lefts:  Vector[A],
+   focus:        A,
+   size:         Long,
+   maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
 
-  val rightStorage = Vector()
+  val rights = Vector()
 }
 
 private[util] final case class DoubleEndBuffer[A] private (
@@ -109,8 +115,8 @@ private[util] final case class DoubleEndBuffer[A] private (
   size:    Long,
   maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
 
-  val leftStorage  = Vector()
-  val rightStorage = Vector()
+  val lefts  = Vector()
+  val rights = Vector()
 }
 
 object DoubleEndBuffer {
