@@ -95,8 +95,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
           .fold(oi.isEmpty) { bz => assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
-
-  // TODO fails
+  
   property("buffer never has duplicate items") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
@@ -107,57 +106,16 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
             bs => bs.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1)) }
     }
 
-  // TODO fails
-//  property("buffer is always a segment of the input") =
-  //    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
-  //      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
-  //        BufferedZipper(us.s, Some(size.cap))
-  //          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
-  //            in,
-  //            path,
-  //            bs => us.s.containsSlice(bs.buffer.toList)) }
-  //    }
-
-  case class Debug(passing: Boolean, input: List[Int], bufferContents: String, bufferType: String) {
-    override def toString: String = s"Passing: $passing\nInput:   $input\nBuffer:  $bufferContents\nType:    $bufferType\n"
-  }
   property("buffer is always a segment of the input") =
-    forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
-      (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
-        val debugs = BufferedZipper(us.s, Some(size.cap))
-          .fold[List[Debug]](List()) { in => Debug(
-              us.s.containsSlice(in.buffer.toList),
-              us.s.toList,
-              s"${in.buffer}",
-              in.buffer match {
-                case DoubleEndBuffer(_, _, _)   => "DoubleEndBuffer"
-                case LeftEndBuffer(_, _, _, _)  => "LeftEndBuffer"
-                case MidBuffer(_, _, _, _, _)   => "MidBuffer"
-                case RightEndBuffer(_, _, _, _) => "RightEndBuffer"
-              }
-            ) :: resultsOnPath[Id, Int, Debug](
-            in,
-            path,
-            bs => Debug(
-              us.s.containsSlice(bs.buffer.toList),
-              us.s.toList,
-              s"${bs.buffer}",
-              bs.buffer match {
-                case DoubleEndBuffer(_, _, _)   => "DoubleEndBuffer"
-                case LeftEndBuffer(_, _, _, _)  => "LeftEndBuffer"
-                case MidBuffer(_, _, _, _, _)   => "MidBuffer"
-                case RightEndBuffer(_, _, _, _) => "RightEndBuffer"
-              }
-            )) }
-          .zip(path)
-        if (debugs.exists(!_._1.passing)) {
-          debugs.map(println(_))
-          println("-------------------------- TEST END --------------------------")
-        }
-        debugs.forall(_._1.passing)
-    }
+      forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+        (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
+          BufferedZipper(us.s, Some(size.cap))
+            .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
+              in,
+              path,
+              bs => us.s.containsSlice(bs.buffer.toList)) }
+      }
 
-  // TODO fails
   property("buffer never contains the focus") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
@@ -193,7 +151,6 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       }
     }
 
-  // TODO fails
   // TODO replace var with state monad
   property("with unlimited buffer, effect happens at most once per element") = forAll {
     (inStream: Stream[Int], path: Path) => {
