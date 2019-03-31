@@ -95,7 +95,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), Some(size.cap))
           .fold(oi.isEmpty) { bz => assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
     }
-  
+
   property("buffer never has duplicate items") =
     forAll(uniqueIntStreamGen, nonZeroBufferSizeGen(16), pathGen) {
       (us: UniqueStream[Int], size: LargerBuffer, path: Path) =>
