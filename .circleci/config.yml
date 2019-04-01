@@ -1,6 +1,9 @@
 version: 2.1
 orbs:
   codecov: codecov/codecov@1.0.3
+machine:
+  environment:
+    JAVA_TOOL_OPTIONS: -javaagent:"~/.ivy2/cache/com.github.jbellis/jamm/jars/jamm-0.3.3.jar"
 jobs:
   build:
     docker:
