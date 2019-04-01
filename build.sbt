@@ -16,7 +16,7 @@ lazy val randpix = (project in file("."))
     libraryDependencies += "co.fs2"             %% "fs2-io"      % "1.0.2",
     libraryDependencies += "com.github.jbellis" %  "jamm"        % "0.3.3",
 
-    libraryDependencies += "com.github.nathaniel-may" % "nest" % "v0.1.0" % "test",
-    libraryDependencies += "org.scalatest"  %% "scalatest"   % "3.0.5"  % "test",
-    libraryDependencies += "org.scalacheck" %% "scalacheck"  % "1.14.0" % "test"
+    libraryDependencies += "com.github.nathaniel-may" %  "nest"        % "v0.1.0" % "test",
+    libraryDependencies += "org.scalatest"            %% "scalatest"   % "3.0.5"  % "test",
+    libraryDependencies += "org.scalacheck"           %% "scalacheck"  % "1.14.0" % "test"
   )
