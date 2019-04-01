@@ -33,7 +33,19 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
     * This implementation aims to minimize the total effects from M by reusing what is in the buffer rather
     * than minimize traversals.
     */
-  def toList: M[List[A]] = zipper.toStream.toList.sequence // TODO write toList to minimize effects
+  //TODO do toStream *instead* lists shouldn't be supported
+  def toList: M[List[A]] = {
+    def goLeft(bz: BufferedZipper[M, A], l: M[List[A]]): M[List[A]] =
+      bz.prev.fold(l) { pmbz => pmbz.flatMap { pbz => goLeft(pbz, l.map(pbz.focus :: _)) } }
+
+    def goRight(bz: BufferedZipper[M, A], l: M[List[A]]): M[List[A]] =
+      bz.next.fold(l.map(_.reverse)) { nmbz => nmbz.flatMap { nbz => goRight(nbz, l.map(nbz.focus :: _)) } }
+
+    for {
+      l <- goLeft(this, point(List()))
+      r <- goRight(this, point(List()))
+    } yield l ::: focus :: r
+  }
 
 }
 
