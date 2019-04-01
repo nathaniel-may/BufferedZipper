@@ -28,9 +28,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   implicit val shrinkUniqueStream: Shrink[UniqueStream[Int]] = Shrinkers.shrinkUniqueStream[Int]
 
 
-  property("to List returns the same as streamInput.toList") = forAll {
+  //TODO regardless of starting point
+  property("toStream is the same as the streamInput") = forAll {
     (inStream: Stream[Int], path: Path) => BufferedZipper[Id, Int](inStream, None)
-      .fold[List[Int]](List()) { move[Id, Int](path, _).toList } == inStream.toList
+      .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
   property("list of elements unzipped forwards is the same as the input with no buffer limit") = forAll {

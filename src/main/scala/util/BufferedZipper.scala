@@ -26,25 +26,24 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
       case buff: NoLeft[A]  => buff.prev(prevFocus)
     }, zPrev ) } }
 
-  def toStream: Stream[M[A]] = zipper.toStream
-
   /**
-    * Traverses from the current position all the way to the left, all the way right then reverses the output.
-    * This implementation aims to minimize the total effects from M by reusing what is in the buffer rather
-    * than minimize traversals.
+    * Traverses from the current position all the way to the left, and all the way right.
+    * Prepends left to focus + right which means the left side is traversed twice.
+    *
+    * This implementation aims to minimize the total effects from M by reusing what is
+    * in the buffer rather than minimize traversals.
     */
-  //TODO do toStream *instead* lists shouldn't be supported
-  def toList: M[List[A]] = {
-    def goLeft(bz: BufferedZipper[M, A], l: M[List[A]]): M[List[A]] =
-      bz.prev.fold(l) { pmbz => pmbz.flatMap { pbz => goLeft(pbz, l.map(pbz.focus :: _)) } }
+  def toStream: M[Stream[A]] = {
+    def goLeft(bz: BufferedZipper[M, A], l: M[Stream[A]]): M[Stream[A]] =
+      bz.prev.fold(l) { pmbz => pmbz.flatMap { pbz => goLeft(pbz, l.map(pbz.focus #:: _)) } }
 
-    def goRight(bz: BufferedZipper[M, A], l: M[List[A]]): M[List[A]] =
-      bz.next.fold(l.map(_.reverse)) { nmbz => nmbz.flatMap { nbz => goRight(nbz, l.map(nbz.focus :: _)) } }
+    def goRight(bz: BufferedZipper[M, A], l: M[Stream[A]]): M[Stream[A]] =
+      bz.next.fold(l.map(_.reverse)) { nmbz => nmbz.flatMap { nbz => goRight(nbz, l.map(nbz.focus #:: _)) } }
 
     for {
-      l <- goLeft(this, point(List()))
-      r <- goRight(this, point(List()))
-    } yield l ::: focus :: r
+      l <- goLeft(this, point(Stream()))
+      r <- goRight(this, point(Stream()))
+    } yield l #::: focus #:: r
   }
 
 }
