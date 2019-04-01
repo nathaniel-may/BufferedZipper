@@ -14,8 +14,8 @@ import scalaz.effect.IO
 // Project
 import BufferedZipperFunctions._
 import PropertyHelpers._
+import Directions.{NP, N, P}
 
-//TODO add test for buffer eviction in the correct direction ....idk how.
 //TODO add test that buffer size should only increase for ints
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
@@ -131,6 +131,21 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       (s: Stream[Int], size: LargerBuffer, path: Path) =>
         BufferedZipper[Id, Int](s, Some(size.cap))
           .fold(s.isEmpty) { assertOnPath[Id, Int](_, path, measureBufferContents[Id, Int](_) <= size.cap) }
+    }
+
+  property ("buffer evicts the correct elements") =
+    forAll(intStreamGen, nonZeroBufferSizeGen(16), pathGen) {
+      (s: Stream[Int], size: LargerBuffer, path: Path) =>
+        val (lrs, realPath) = BufferedZipper[Id, Int](s, Some(size.cap))
+          .fold[(List[(Vector[Int], Vector[Int])], Path)]((List(), Stream())) {
+            resultsOnExactPath[Id, Int, (Vector[Int], Vector[Int])](_, path, bz => (bz.buffer.lefts, bz.buffer.rights)) }
+        lrs.zip(lrs.drop(1))
+          .zip(realPath)
+          .map { case (((l0, r0), (l1, r1)), np) => np match {
+            case N => l1.size >= l0.size && r1.size <= r0.size
+            case P => r1.size >= r0.size && l1.size <= l0.size
+          } }
+          .forall(_ == true)
     }
  
   // TODO replace var with state monad
