@@ -10,6 +10,8 @@ import testingUtil.Shrinkers
 // Scala
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
+import scalaz.State
+import scalaz._, Scalaz._ //TODO minimize for traverse
 
 // Project
 import BufferedZipperFunctions._
@@ -166,13 +168,11 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       }
     }
 
-  // TODO replace var with state monad
   property("with unlimited buffer, effect happens at most once per element") = forAll {
     (inStream: Stream[Int], path: Path) => {
-      var outsideState: Int = 0
-      val inStreamWithEffect = inStream.map( i => IO {outsideState += 1; i} )
-      BufferedZipper[IO, Int](inStreamWithEffect, None).map { iobz => iobz.flatMap(move(path, _)) }
-      outsideState <= inStream.size
+      BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
+        .map { _.flatMap(move(path, _)) }
+        .fold(0){ _.exec(0) } <= inStream.size
     }
   }
 

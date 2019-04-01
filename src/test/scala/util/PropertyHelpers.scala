@@ -2,6 +2,7 @@ package util
 
 // Scala
 import scalaz.Monad
+import scalaz.State
 
 // Project
 import BufferedZipperFunctions._
@@ -52,5 +53,9 @@ object PropertyHelpers {
 
     go(bz, path)
   }
+
+  type Counter[A] = State[Int, A]
+  def bumpCounter[A](a: A): State[Int, A] =
+    State.modify[Int](_ + 1).map(_ => a)
 
 }

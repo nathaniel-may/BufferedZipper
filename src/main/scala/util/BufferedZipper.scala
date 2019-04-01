@@ -15,16 +15,18 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
   val focus: A   = buffer.focus
 
   def next: Option[M[BufferedZipper[M, A]]] = zipper.next.map { zNext =>
-    zNext.focus.map { nextFocus => BufferedZipper[M, A](buffer match {
-      case buff: HasRight[A] => buff.next
-      case buff: NoRight[A]  => buff.next(nextFocus)
-    }, zNext ) } }
+    buffer match {
+      case buff: HasRight[A] => point(BufferedZipper(buff.next, zNext))
+      case buff: NoRight[A]  => zNext.focus.map(focus => BufferedZipper(buff.next(focus), zNext))
+    }
+  }
 
   def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
-    zPrev.focus.map { prevFocus => BufferedZipper[M, A](buffer match {
-      case buff: HasLeft[A] => buff.prev
-      case buff: NoLeft[A]  => buff.prev(prevFocus)
-    }, zPrev ) } }
+    buffer match {
+      case buff: HasLeft[A] => point(BufferedZipper(buff.prev, zPrev))
+      case buff: NoLeft[A]  => zPrev.focus.map(focus => BufferedZipper(buff.prev(focus), zPrev))
+    }
+  }
 
   /**
     * Traverses from the current position all the way to the left, and all the way right.
