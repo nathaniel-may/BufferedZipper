@@ -16,23 +16,6 @@ object BufferedZipperFunctions {
   def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
     bs.buffer.toList.map(meter.measureDeep).sum - meter.measureDeep(bs.buffer.focus)
 
-  def unzipAndMapViaPath[M[_] : Monad, A, B](path: Stream[NP], zipper: BufferedZipper[M, A], f: BufferedZipper[M, A] => B): M[List[B]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
-    // if the path walks off the zipper it keeps evaluating till it walks back on
-    def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]]): M[List[B]] = steps match {
-      case N #:: ps => z.next.fold(go(z, ps, l)) { mbz =>
-        mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
-      case P #:: ps => z.prev.fold(go(z, ps, l)) { mbz =>
-        mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _))) }
-      case Empty => l.map(_.reverse)
-    }
-
-    go(zipper, path, point(List(f(zipper))))
-  }
-
-  //TODO add to type?
   def toList[M[_] : Monad, A](dir: Direction, in: BufferedZipper[M, A]): M[List[A]] =
     unzipAndMap[M, A, A](dir, in, bs => bs.focus)
 

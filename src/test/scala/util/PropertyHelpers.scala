@@ -10,21 +10,23 @@ import Directions._
 
 object PropertyHelpers {
 
-  // TODO add fail early behavior
   def assertOnPath[M[_] : Monad, A](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => Boolean): M[Boolean] = {
     val syntax = implicitly[Monad[M]].monadSyntax
     import syntax._
-    unzipAndMapViaPath(path, bz, f).map(_.forall(identity))
+    resultsOnPath(bz, path, f).map(_.forall(identity))
   }
 
-  def resultsOnPath[M[_] : Monad, A, B](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => B): M[List[B]] =
-    unzipAndMapViaPath(path, bz, f) //TODO rename to resultsOnPath
+  def resultsOnPath[M[_] : Monad, A, B](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => B): M[List[B]] = {
+    val syntax = implicitly[Monad[M]].monadSyntax
+    import syntax._
+    resultsAndPathTaken(bz, path, f).map(_._1)
+  }
 
-  def resultsOnExactPath[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], path: Stream[NP], f: BufferedZipper[M, A] => B): M[(List[B], Path)] = {
+  def resultsAndPathTaken[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], path: Stream[NP], f: BufferedZipper[M, A] => B): M[(List[B], Path)] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
-    // if the path walks off the zipper it keeps evaluating till it walks back on
+    // if the path walks off the zipper it keeps evaluating till it walks back on, but doesn't record the out of range
     def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]], stepsTaken: Stream[NP]): M[(List[B], Stream[NP])] = steps match {
       case N #:: ps => z.next.fold(go(z, ps, l, stepsTaken)) { mbz =>
         mbz.flatMap(zShift => go(zShift, ps, l.map(f(zShift) :: _), N #:: stepsTaken)) }

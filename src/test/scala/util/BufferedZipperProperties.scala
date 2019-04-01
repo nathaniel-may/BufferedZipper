@@ -138,7 +138,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       (s: Stream[Int], size: LargerBuffer, path: Path) =>
         val (lrs, realPath) = BufferedZipper[Id, Int](s, Some(size.cap))
           .fold[(List[(Vector[Int], Vector[Int])], Path)]((List(), Stream())) {
-            resultsOnExactPath[Id, Int, (Vector[Int], Vector[Int])](_, path, bz => (bz.buffer.lefts, bz.buffer.rights)) }
+            resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](_, path, bz => (bz.buffer.lefts, bz.buffer.rights)) }
         lrs.zip(lrs.drop(1))
           .zip(realPath)
           .map { case (((l0, r0), (l1, r1)), np) => np match {
