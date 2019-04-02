@@ -58,4 +58,7 @@ object PropertyHelpers {
   def bumpCounter[A](a: A): State[Int, A] =
     State.modify[Int](_ + 1).map(_ => a)
 
+  def zeroCounter[A](a: A): State[Int, A] =
+    State.modify[Int](_ => 0).map(_ => a)
+
 }

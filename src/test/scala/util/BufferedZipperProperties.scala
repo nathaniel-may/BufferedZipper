@@ -10,8 +10,6 @@ import testingUtil.Shrinkers
 // Scala
 import scalaz.Scalaz.Id
 import scalaz.effect.IO
-import scalaz.State
-import scalaz._, Scalaz._ //TODO minimize for traverse
 
 // Project
 import BufferedZipperFunctions._
@@ -34,6 +32,17 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     (inStream: Stream[Int], path: Path) => BufferedZipper[Id, Int](inStream, None)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
+
+  //TODO start with generated BufferedZipper instead of a Stream?
+    property("toStream uses buffer to minimize effectful calls") = forAll {
+      (inStream: Stream[Int], path: Path) =>
+        val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
+          .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
+        val effects = start.fold(0) { _.flatMap(_.toStream).exec(0) }
+        val shouldBe = start.fold(0) { _.map { bz =>
+          inStream.size - (bz.buffer.lefts.size + 1 + bz.buffer.rights.size) }.eval(0) }
+        effects == shouldBe
+    }
 
   property("list of elements unzipped forwards is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
