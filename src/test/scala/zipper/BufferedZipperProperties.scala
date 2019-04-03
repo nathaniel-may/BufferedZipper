@@ -100,10 +100,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer limit is never exceeded") =
-    forAll(intStreamGen, bufferGenAtLeast(16), pathGen) {
-      (s: Stream[Int], size: BufferSize, path: Path) =>
-        BufferedZipper[Id, Int](s, size.max)
-          .fold(s.isEmpty) { assertOnPath[Id, Int](_, path, measureBufferContents[Id, Int](_) <= size.max.get) }
+    forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) <= bz.buffer.maxSize.get)
     }
 
   property ("buffer evicts the correct elements") =
