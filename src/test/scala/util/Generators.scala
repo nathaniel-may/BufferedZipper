@@ -43,34 +43,36 @@ object Generators {
 
     def bZipGen[A](buffGen: Gen[BufferSize], init: A => M[A] = (a: A) => point[A](a))(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
       streamGenMin[A](1)(evsa, eva)
+        .map(_.map(init))
         .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
 
-    def uniqueBZipGen[A](buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    def uniqueBZipGen[A](buffGen: Gen[BufferSize], init: A => M[A] = (a: A) => point[A](a))(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
       uniqueStreamGen[A](1)(evsa, eva)
+        .map(_.map(init))
         .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
 
-    def bZipGenMin[A](minSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    def bZipGenMin[A](minSize: Int, buffGen: Gen[BufferSize], init: A => M[A] = (a: A) => point[A](a))(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
       streamGenMin[A](minSize)(evsa, eva)
+        .map(_.map(init))
         .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
 
-    def bZipGenMax[A](maxSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    def bZipGenMax[A](maxSize: Int, buffGen: Gen[BufferSize], init: A => M[A] = (a: A) => point[A](a))(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
       streamGenMax[A](maxSize)(evsa, eva)
+        .map(_.map(init))
         .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
 
-    private def uniqueStreamGen[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {
+    private def uniqueStreamGen[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] = for {
       s        <- evsa.arbitrary
       nonEmpty <- eva.arbitrary.map(_ #:: s)
       unique   =  nonEmpty.distinct
-      ms       <- unique.map { point(_) }
-    } yield ms
+    } yield unique
 
-    private def streamGenMin[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {
+    private def streamGenMin[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] = for {
       s  <- evsa.arbitrary
       s2 <- Gen.pick(2, eva.arbitrary, eva.arbitrary).map(x => x.toStream #::: s)
-      ms <- s2.map { point(_) }
-    } yield ms
+    } yield s2
 
-    private def streamGenMax[A](maxSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] =
+    private def streamGenMax[A](maxSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] =
       streamGenMin[A](1).map(_.take(maxSize))
 
   }

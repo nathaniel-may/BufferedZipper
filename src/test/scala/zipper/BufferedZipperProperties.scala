@@ -127,10 +127,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("effect only takes place once with a stream of one element regardless of buffer size") =
-    forAll(implicitly[Arbitrary[Short]].arbitrary, bufferSizeGen) {
-      (elem: Short, size: BufferSize) =>
-        BufferedZipper[Counter, Short](Stream(elem).map(bumpCounter), size.max)
-          .fold(false) { _.exec(0) == 1 }
+    forAll(WithEffect[Counter].bZipGen[Int](bufferSizeGen, bumpCounter)) {
+      (cbz: Counter[BufferedZipper[Counter, Int]]) => cbz.exec(0) == 1
     }
 
   property("with unlimited buffer, effect happens at most once per element") =
