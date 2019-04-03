@@ -84,13 +84,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer never has duplicate items") =
-    forAll(uniqueIntStreamGen, bufferGenAtLeast(16), pathGen) {
-      (us: UniqueStream[Int], size: BufferSize, path: Path) =>
-        BufferedZipper(us.s, size.max)
-          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
-            in,
+    forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](
+            bz,
             path,
-            bs => bs.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1)) }
+            bs => bs.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
     }
 
   property("buffer is always a segment of the input") =

@@ -37,6 +37,10 @@ object Generators {
     streamGenMin[M, A](1)(implicitly[Monad[M]], evsa, eva)
       .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
 
+  def uniqueBZipGen[M[_]: Monad, A](buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
+    uniqueStreamGen[M, A](1)(implicitly[Monad[M]], evsa, eva)
+      .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
+
   def bZipGenMin[M[_]: Monad, A](minSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
     streamGenMin[M, A](minSize)(implicitly[Monad[M]], evsa, eva)
       .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
@@ -54,6 +58,13 @@ object Generators {
   val pathGen: Gen[Stream[NP]] = Gen.listOf(
     Gen.pick(1, List(N, N, P)).flatMap(_.head))
       .flatMap(_.toStream)
+
+  private def uniqueStreamGen[M[_]: Monad, A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {
+    s        <- evsa.arbitrary
+    nonEmpty <- eva.arbitrary.map(_ #:: s)
+    unique   =  nonEmpty.distinct
+    ms       <- unique.map { implicitly[Monad[M]].point(_) }
+  } yield ms
 
   private def streamGenMin[M[_]: Monad, A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {
     s  <- evsa.arbitrary
