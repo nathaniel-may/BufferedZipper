@@ -13,10 +13,8 @@ import util.PropertyFunctions._
 import util.Directions.{N, P}
 
 //TODO separate test file for WindowBuffer
-//TODO add test that buffer size should only increase for ints
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
-//TODO arch - should test inputs be streams or buffered zippers?
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val noEffect = WithEffect[Id]()
@@ -106,11 +104,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property ("buffer evicts the correct elements") =
-    forAll(intStreamGen, bufferGenAtLeast(16), pathGen) {
-      (s: Stream[Int], size: BufferSize, path: Path) =>
-        val (lrs, realPath) = BufferedZipper[Id, Int](s, size.max)
-          .fold[(List[(Vector[Int], Vector[Int])], Path)]((List(), Stream())) {
-            resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](_, path, bz => (bz.buffer.lefts, bz.buffer.rights)) }
+    forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        val (lrs, realPath) = resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](bz, path, bz2 => (bz2.buffer.lefts, bz.buffer.rights))
         lrs.zip(lrs.drop(1))
           .zip(realPath)
           .map { case (((l0, r0), (l1, r1)), np) => np match {
