@@ -20,10 +20,12 @@ import util.Directions.{N, P}
 //TODO arch - should test inputs be streams or buffered zippers?
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
+  val noEffect = WithEffect[Id]()
+  import noEffect.{bZipGen, bZipGenMax, bZipGenMin, uniqueBZipGen}
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
   implicit val aBufferSize: Arbitrary[BufferSize] = Arbitrary(bufferSizeGen)
-  
+
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
     (inStream: Stream[Int], size: BufferSize, path: Path) => BufferedZipper[Int](inStream, size.max)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
@@ -50,7 +52,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   property("next then prev should result in the first element regardless of buffer limit") =
-    forAll(bZipGenMin[Id, Int](2, bufferSizeGen)) {
+    forAll(bZipGenMin[Int](2, bufferSizeGen)) {
       (zipper: BufferedZipper[Id, Int]) => (for {
         next   <- zipper.next
         prev   <- next.prev
@@ -69,7 +71,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer is being used when there are at least two elements and space for at least one element") =
-    forAllNoShrink(bZipGenMin[Id, Int](2, bufferGenAtLeast(16)), pathGen) {
+    forAllNoShrink(bZipGenMin[Int](2, bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
           resultsOnPath[Id, Int, Long](bz, path, measureBufferContents[Id, Int])
             .drop(1)
@@ -77,27 +79,27 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer is not being used for streams of one or less elements") =
-    forAll(bZipGenMax[Id, Int](1, bufferGenAtLeast(16)), pathGen) {
+    forAll(bZipGenMax[Int](1, bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0)
     }
 
   property("buffer never has duplicate items") =
-    forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (in: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](in, path, bz =>
           bz.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
     }
 
   property("buffer is always a segment of the input") =
-      forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+      forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
         (in: BufferedZipper[Id, Int], path: Path) =>
           assertOnPath[Id, Int](in, path, bz =>
             in.toStream.containsSlice(bz.buffer.toList))
       }
 
   property("buffer never contains the focus") =
-    forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (in: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](in, path, bz => !bz.buffer.contains(bz.focus))
     }
@@ -131,12 +133,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           .fold(false) { _.exec(0) == 1 }
     }
 
-  property("with unlimited buffer, effect happens at most once per element") = forAll {
-    (inStream: Stream[Int], path: Path) => {
-      BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
-        .map { _.flatMap(move(path, _)) }
-        .fold(0){ _.exec(0) } <= inStream.size
+  property("with unlimited buffer, effect happens at most once per element") =
+    forAll(WithEffect[Counter].bZipGen[Int](bufferGenAtLeast(16), bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        cbz.flatMap(move(path, _)).exec(0) <= cbz.flatMap(_.toStream).eval(0).size
     }
-  }
-
 }
