@@ -22,6 +22,13 @@ trait WindowBuffer[A] {
   def contains(a: A): Boolean = lefts.contains(a) || rights.contains(a)
   def toList: List[A] = toVector.toList
   def toVector: Vector[A] = lefts.reverse ++: focus +: rights
+  def map[B](f: A => B): WindowBuffer[B] = this match {
+    case LeftEndBuffer(rs, foc, s, max)  => LeftEndBuffer(rs.map(f), f(foc), s, max)
+    case RightEndBuffer(ls, foc, s, max) => RightEndBuffer(ls.map(f), f(foc), s, max)
+    case DoubleEndBuffer(foc, s, max)    => DoubleEndBuffer(f(foc), s, max)
+    case MidBuffer(ls, rs, foc, s, max)  => MidBuffer(ls.map(f), rs.map(f), f(foc), s, max)
+  }
+
 
   private[util] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
     if (maxSize.fold(true) { size <= _ }) (storage, size)
@@ -89,34 +96,34 @@ trait HasRight[A] extends WindowBuffer[A] {
 }
 
 private[util] final case class MidBuffer[A] private (
-                                                      lefts:  Vector[A],
-                                                      rights: Vector[A],
-                                                      focus:        A,
-                                                      contentSize:         Long,
-                                                      maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
+  lefts:  Vector[A],
+  rights: Vector[A],
+  focus:        A,
+  contentSize:         Long,
+  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
 private[util] final case class LeftEndBuffer[A] private (
-                                                          rights: Vector[A],
-                                                          focus:        A,
-                                                          contentSize:         Long,
-                                                          maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
+  rights: Vector[A],
+  focus:        A,
+  contentSize:         Long,
+  maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
 
   val lefts  = Vector()
 }
 
 private[util] final case class RightEndBuffer[A] private (
-                                                           lefts:  Vector[A],
-                                                           focus:        A,
-                                                           contentSize:         Long,
-                                                           maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
+  lefts:  Vector[A],
+  focus:        A,
+  contentSize:         Long,
+  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
 
   val rights = Vector()
 }
 
 private[util] final case class DoubleEndBuffer[A] private (
-                                                            focus:   A,
-                                                            contentSize:    Long,
-                                                            maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
+  focus:   A,
+  contentSize:    Long,
+  maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
 
   val lefts  = Vector()
   val rights = Vector()

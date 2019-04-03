@@ -9,13 +9,13 @@ import testingUtil.Shrinkers
 
 // Scala
 import scalaz.Scalaz.Id
-import scalaz.effect.IO
 
 // Project
 import BufferedZipperFunctions._
 import PropertyHelpers._
-import Directions.{NP, N, P}
+import Directions.{N, P}
 
+//TODO separate test file for WindowBuffer
 //TODO add test that buffer size should only increase for ints
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
@@ -33,15 +33,25 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   }
 
   //TODO start with generated BufferedZipper instead of a Stream?
-    property("toStream uses buffer to minimize effectful calls") = forAll {
-      (inStream: Stream[Int], path: Path) =>
-        val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
-          .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
-        val effects = start.fold(0) { _.flatMap(_.toStream).exec(0) }
-        val shouldBe = start.fold(0) { _.map { bz =>
-          inStream.size - bz.buffer.size }.eval(0) }
-        effects == shouldBe
-    }
+  property("toStream uses buffer to minimize effectful calls") = forAll {
+    (inStream: Stream[Int], path: Path) =>
+      val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
+        .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
+      val effects = start.fold(0) { _.flatMap(_.toStream).exec(0) }
+      val shouldBe = start.fold(0) { _.map { bz =>
+        inStream.size - bz.buffer.size }.eval(0) }
+      effects == shouldBe
+  }
+
+  property("map uses buffer to minimize effectful calls") = forAll {
+    (inStream: Stream[Int], path: Path) =>
+      val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
+        .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
+      val effects = start.fold(0) { _.flatMap(_.map(_ + 1).toStream).exec(0) }
+      val shouldBe = start.fold(0) { _.map { bz =>
+        inStream.size - bz.buffer.size }.eval(0) }
+      effects == shouldBe
+  }
 
   property("list of elements unzipped forwards is the same as the input with no buffer limit") = forAll {
     inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
@@ -162,7 +172,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(implicitly[Arbitrary[Short]].arbitrary, flexibleBufferSizeGen) {
       (elem: Short, size: FlexibleBuffer) =>
         BufferedZipper[Counter, Short](Stream(elem).map(bumpCounter), Some(size.cap))
-          .fold(false) { _.exec(0) == 1}
+          .fold(false) { _.exec(0) == 1 }
     }
 
   property("with unlimited buffer, effect happens at most once per element") = forAll {

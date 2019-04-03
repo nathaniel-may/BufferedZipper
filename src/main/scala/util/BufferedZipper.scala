@@ -27,6 +27,9 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
       case buff: NoLeft[A]  => zPrev.focus.map(focus => BufferedZipper(buff.prev(focus), zPrev))
     }
   }
+  
+  def map[B](f: A => B): BufferedZipper[M, B] =
+    new BufferedZipper(buffer.map(f), zipper.map(_.map(f)))
 
   /**
     * Traverses from the current position all the way to the left, and all the way right.
