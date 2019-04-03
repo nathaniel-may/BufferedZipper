@@ -40,15 +40,15 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         effects == shouldBe
     }
 
-  property("map uses buffer to minimize effectful calls") = forAll {
-    (inStream: Stream[Int], path: Path) =>
-      val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
-        .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
-      val effects = start.fold(0) { _.flatMap(_.map(_ + 1).toStream).exec(0) }
-      val shouldBe = start.fold(0) { _.map { bz =>
-        inStream.size - bz.buffer.size }.eval(0) }
-      effects == shouldBe
-  }
+  property("map uses buffer to minimize effectful calls") =
+    forAll(WithEffect[Counter].bZipGen[Int](bufferSizeGen, bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
+        val effects = start.flatMap(_.map(_ + 1).toStream).exec(0)
+        val shouldBe = start.map { bz =>
+          bz.toStream.eval(0).size - bz.buffer.size }.eval(0)
+        effects == shouldBe
+    }
 
   property("next then prev should result in the first element regardless of buffer limit") =
     forAll(bZipGenMin[Int](2, bufferSizeGen)) {
