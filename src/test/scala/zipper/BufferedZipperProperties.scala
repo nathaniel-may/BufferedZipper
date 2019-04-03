@@ -11,7 +11,6 @@ import util.Shrinkers
 import scalaz.Scalaz.Id
 
 // Project
-import util.BufferedZipperFunctions._
 import util.PropertyFunctions._
 import util.Directions.{N, P}
 
@@ -24,15 +23,14 @@ import util.Directions.{N, P}
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val arbPath: Arbitrary[Path] = Arbitrary(pathGen)
+  implicit val arbFlexibleBuffer: Arbitrary[FlexibleBuffer] = Arbitrary(flexibleBufferSizeGen)
   implicit val shrinkUniqueStream: Shrink[UniqueStream[Int]] = Shrinkers.shrinkUniqueStream[Int]
 
-
-  property("toStream is the same as the streamInput regardless of starting point") = forAll {
-    (inStream: Stream[Int], path: Path) => BufferedZipper[Id, Int](inStream, None)
+  property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
+    (inStream: Stream[Int], size: FlexibleBuffer, path: Path) => BufferedZipper[Int](inStream, Some(size.cap))
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
-  //TODO start with generated BufferedZipper instead of a Stream?
   property("toStream uses buffer to minimize effectful calls") = forAll {
     (inStream: Stream[Int], path: Path) =>
       val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
@@ -52,32 +50,6 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         inStream.size - bz.buffer.size }.eval(0) }
       effects == shouldBe
   }
-
-  property("list of elements unzipped forwards is the same as the input with no buffer limit") = forAll {
-    inStream: Stream[Int] => BufferedZipper[Id, Int](inStream, None)
-      .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
-  }
-
-  // TODO redundant test?
-  property("list of elements unzipped forwards is the same as the input with a small buffer limit") =
-    forAll(finiteIntStreamGen, cappedBufferSizeGen(300L)) {
-      (inStream: Stream[Int], size: CappedBuffer) => BufferedZipper[Id, Int](inStream, Some(size.cap))
-        .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
-    }
-
-  property("list of elements unzipped forwards is the same as the input regardless of buffer limit") =
-    forAll(intStreamGen, flexibleBufferSizeGen) {
-      (inStream: Stream[Int], size: FlexibleBuffer) =>
-        BufferedZipper[Id, Int](inStream, Some(size.cap))
-          .fold[List[Int]](List())(toList(Forwards, _)) == inStream.toList
-    }
-
-  property("list of elements unzipping from the back is the same as the input regardless of buffer limit") =
-    forAll(intStreamGen, flexibleBufferSizeGen) {
-      (s: Stream[Int], size: FlexibleBuffer) =>
-        BufferedZipper[Id, Int](s, Some(size.cap))
-          .fold(s.isEmpty)(toList(Backwards, _) == s.toList)
-    }
 
   property("next then prev should result in the first element regardless of buffer limit") =
     forAll(bZipGenMin[Id, Int](2, flexibleBufferSizeGen)) {
