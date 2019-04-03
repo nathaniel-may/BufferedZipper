@@ -6,6 +6,7 @@ import zipper.BufferedZipper
 
 // Scala
 import scalaz.Monad
+import scalaz.Scalaz.Id
 
 // Project
 import util.Directions.{N, NP, P}
@@ -48,12 +49,6 @@ object Generators {
   def bZipGenMax[M[_]: Monad, A](maxSize: Int, buffGen: Gen[BufferSize])(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[M[BufferedZipper[M, A]]] =
     streamGenMax[M, A](maxSize)(implicitly[Monad[M]], evsa, eva)
       .flatMap { sm => buffGen.map { buff => BufferedZipper[M, A](sm, buff.max).get } }
-
-  case class UniqueStream[T](s: Stream[T])
-  private lazy val largeListOfInts = (0 to 300000).toList
-  val uniqueIntStreamGen: Gen[UniqueStream[Int]] = Gen.sized { size =>
-    Gen.pick(size, largeListOfInts).flatMap(x => UniqueStream(x.toStream))
-  }
 
   val pathGen: Gen[Stream[NP]] = Gen.listOf(
     Gen.pick(1, List(N, N, P)).flatMap(_.head))

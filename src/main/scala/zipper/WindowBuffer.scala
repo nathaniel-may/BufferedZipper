@@ -12,10 +12,11 @@ trait WindowBuffer[A] {
   import WindowBuffer.meter
 
   val focus: A
+  val maxSize: Option[Long]
+
   private[zipper] val rights: Vector[A]
   private[zipper] val lefts: Vector[A]
   private[zipper] val contentSize: Long
-  private[zipper] val maxSize: Option[Long]
 
   private[zipper] lazy val size: Int = lefts.size + 1 + rights.size
 

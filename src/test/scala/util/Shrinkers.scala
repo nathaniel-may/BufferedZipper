@@ -1,21 +1,26 @@
 package util
 
+// ScalaCheck
 import org.scalacheck.Shrink
-import Generators.UniqueStream
+
+// Scala
+import scalaz.Scalaz.Id
+
+// Project
+import zipper.BufferedZipper
+
 
 object Shrinkers {
 
-  def shrinkUniqueStream[T: Shrink]: Shrink[UniqueStream[T]] = Shrink[UniqueStream[T]] { input =>
+  final case class UniqueBZip[A](bz: BufferedZipper[Id, A])
+
+  def shrinkUniqueBZip[T : Shrink]: Shrink[UniqueBZip[T]] = Shrink[UniqueBZip[T]] { input =>
     def isUnique[A](s: Stream[A]): Boolean =
       s.groupBy(identity).forall(_._2.size == 1)
 
-    Shrink.shrink(input.s).filter(isUnique(_)).map(UniqueStream(_))
-//
-//    def go(in: Stream[T], out: Stream[UniqueStream[T]]): Stream[UniqueStream[T]] = in match {
-//      case Stream.Empty => out
-//      case _ #:: xs     => go(xs, UniqueStream(xs) #:: out)
-//    }
-//
-//    go(input.s, Stream())
+    Shrink.shrink(input.bz.toStream)
+      .filter(isUnique(_))
+      .filter(_.nonEmpty)
+      .map { s => UniqueBZip(BufferedZipper(s, input.bz.buffer.maxSize).get) }
   }
 }

@@ -23,8 +23,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
   implicit val aBufferSize: Arbitrary[BufferSize] = Arbitrary(bufferSizeGen)
-  implicit val shrinkUniqueStream: Shrink[UniqueStream[Int]] = Shrinkers.shrinkUniqueStream[Int]
-
+  
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
     (inStream: Stream[Int], size: BufferSize, path: Path) => BufferedZipper[Int](inStream, size.max)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
@@ -85,31 +84,22 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("buffer never has duplicate items") =
     forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
-      (bz: BufferedZipper[Id, Int], path: Path) =>
-        assertOnPath[Id, Int](
-            bz,
-            path,
-            bs => bs.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
+      (in: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](in, path, bz =>
+          bz.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
     }
 
   property("buffer is always a segment of the input") =
-      forAll(uniqueIntStreamGen, bufferGenAtLeast(16), pathGen) {
-        (us: UniqueStream[Int], size: BufferSize, path: Path) =>
-          BufferedZipper(us.s, size.max)
-            .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
-              in,
-              path,
-              bs => us.s.containsSlice(bs.buffer.toList)) }
+      forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+        (in: BufferedZipper[Id, Int], path: Path) =>
+          assertOnPath[Id, Int](in, path, bz =>
+            in.toStream.containsSlice(bz.buffer.toList))
       }
 
   property("buffer never contains the focus") =
-    forAll(uniqueIntStreamGen, bufferGenAtLeast(16), pathGen) {
-      (us: UniqueStream[Int], size: BufferSize, path: Path) =>
-        BufferedZipper(us.s, size.max)
-          .fold(us.s.isEmpty) { in => assertOnPath[Id, Int](
-            in,
-            path,
-            bs => !bs.buffer.contains(bs.focus)) }
+    forAll(uniqueBZipGen[Id, Int](bufferGenAtLeast(16)), pathGen) {
+      (in: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](in, path, bz => !bz.buffer.contains(bz.focus))
     }
 
   property("buffer limit is never exceeded") =
