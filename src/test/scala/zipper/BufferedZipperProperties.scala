@@ -2,9 +2,8 @@ package zipper
 
 // Scalacheck
 import org.scalacheck.Prop.{forAll, forAllNoShrink}
-import org.scalacheck.{Arbitrary, Properties, Shrink}
+import org.scalacheck.{Arbitrary, Properties}
 import util.Generators._
-import util.Shrinkers
 
 // Scala
 import scalaz.Scalaz.Id
@@ -21,7 +20,7 @@ import util.Directions.{N, P}
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val noEffect = WithEffect[Id]()
-  import noEffect.{bZipGen, bZipGenMax, bZipGenMin, uniqueBZipGen}
+  import noEffect.{bZipGen, bZipGenMax, bZipGenMin, uniqueBZipGen} // allows for these functions to be called without explicit Id effect
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
   implicit val aBufferSize: Arbitrary[BufferSize] = Arbitrary(bufferSizeGen)
@@ -31,15 +30,15 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
-  property("toStream uses buffer to minimize effectful calls") = forAll {
-    (inStream: Stream[Int], path: Path) =>
-      val start = BufferedZipper[Counter, Int](inStream.map(bumpCounter), None)
-        .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
-      val effects = start.fold(0) { _.flatMap(_.toStream).exec(0) }
-      val shouldBe = start.fold(0) { _.map { bz =>
-        inStream.size - bz.buffer.size }.eval(0) }
-      effects == shouldBe
-  }
+  property("toStream uses buffer to minimize effectful calls") =
+    forAll(WithEffect[Counter].bZipGen[Int](bufferSizeGen, bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
+        val effects = start.flatMap(_.toStream).exec(0)
+        val shouldBe = start.map { bz =>
+          bz.toStream.eval(0).size - bz.buffer.size }.eval(0)
+        effects == shouldBe
+    }
 
   property("map uses buffer to minimize effectful calls") = forAll {
     (inStream: Stream[Int], path: Path) =>
