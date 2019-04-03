@@ -12,7 +12,7 @@ import scalaz.Scalaz.Id
 
 // Project
 import util.BufferedZipperFunctions._
-import util.PropertyHelpers._
+import util.PropertyFunctions._
 import util.Directions.{N, P}
 
 //TODO separate test file for WindowBuffer
