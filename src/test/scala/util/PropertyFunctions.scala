@@ -12,7 +12,7 @@ import util.Generators.Path
 object PropertyFunctions {
   type Counter[A] = State[Int, A]
   val meter = new MemoryMeter
-  
+
   def bumpCounter[A](a: A): State[Int, A] =
     State.modify[Int](_ + 1).map(_ => a)
 
