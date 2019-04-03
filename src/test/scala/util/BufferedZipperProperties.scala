@@ -157,23 +157,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           } }
           .forall(_ == true)
     }
- 
-  // TODO replace var with state monad
-  property("effect only takes place when focus called with a stream of one element regardless of buffer size") =
-    forAll(implicitly[Arbitrary[Short]].arbitrary, flexibleBufferSizeGen) {
-      (elem: Short, size: FlexibleBuffer) => {
-        var outsideState: Long = 0
-        val instructions = Stream(elem).map(i => IO{ outsideState += i; outsideState })
-        val io = for {
-          mBuff <- BufferedZipper[IO, Long](instructions, Some(size.cap))
-          focus =  for { buff <- mBuff } yield buff.focus
-        } yield focus
-        val      sameBeforeCall = outsideState == 0
-        lazy val sameAfterCall  = outsideState == elem
-        io.map { _.unsafePerformIO() }
 
-        sameBeforeCall && sameAfterCall
-      }
+  property("effect only takes place once with a stream of one element regardless of buffer size") =
+    forAll(implicitly[Arbitrary[Short]].arbitrary, flexibleBufferSizeGen) {
+      (elem: Short, size: FlexibleBuffer) =>
+        BufferedZipper[Counter, Short](Stream(elem).map(bumpCounter), Some(size.cap))
+          .fold(false) { _.exec(0) == 1}
     }
 
   property("with unlimited buffer, effect happens at most once per element") = forAll {
