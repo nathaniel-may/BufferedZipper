@@ -78,10 +78,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer is not being used for streams of one or less elements") =
-    forAll(implicitly[Arbitrary[Option[Int]]].arbitrary, bufferGenAtLeast(16), pathGen) {
-      (oi: Option[Int], size: BufferSize, path: Path) =>
-        BufferedZipper[Id, Int](oi.fold[Stream[Int]](Stream())(Stream(_)), size.max)
-          .fold(oi.isEmpty) { bz => assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0) }
+    forAll(bZipGenMax[Id, Int](1, bufferGenAtLeast(16)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0)
     }
 
   property("buffer never has duplicate items") =

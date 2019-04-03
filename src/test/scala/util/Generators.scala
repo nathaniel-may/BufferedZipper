@@ -61,10 +61,7 @@ object Generators {
     ms <- s2.map { implicitly[Monad[M]].point(_) }
   } yield ms
 
-  private def streamGenMax[M[_]: Monad, A](maxSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] = for {
-    s  <- evsa.arbitrary
-    s2 =  s.take(maxSize)
-    ms <- s2.map { implicitly[Monad[M]].point(_) }
-  } yield ms
+  private def streamGenMax[M[_]: Monad, A](maxSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[M[A]]] =
+    streamGenMin[M, A](1).map(_.take(maxSize))
 
 }
