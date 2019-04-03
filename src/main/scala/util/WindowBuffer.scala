@@ -14,8 +14,10 @@ trait WindowBuffer[A] {
   val focus: A
   private[util] val rights: Vector[A]
   private[util] val lefts: Vector[A]
-  private[util] val size: Long
+  private[util] val contentSize: Long
   private[util] val maxSize: Option[Long]
+
+  private[util] lazy val size: Int = lefts.size + 1 + rights.size
 
   def contains(a: A): Boolean = lefts.contains(a) || rights.contains(a)
   def toList: List[A] = toVector.toList
@@ -28,19 +30,19 @@ trait WindowBuffer[A] {
       shrink(storage.init, size - meter.measureDeep(a)) }
 
   private[util] def shiftWindowLeft(a: A) = {
-    val (newRights, newSize) = shrink(focus +: rights, size + WindowBuffer.meter.measureDeep(a))
+    val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(a))
     if (newRights.isEmpty) DoubleEndBuffer(a, maxSize)
     else                   LeftEndBuffer(newRights, a, newSize, maxSize)
   }
 
   private[util] def shiftWindowRight(a: A) = {
-    val (newLefts, newSize) = shrink(focus +: lefts, size + WindowBuffer.meter.measureDeep(a))
+    val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(a))
     if (newLefts.isEmpty) DoubleEndBuffer(a, maxSize)
     else                  RightEndBuffer(newLefts, a, newSize, maxSize)
   }
 
   private[util] def moveLeftWithinWindow = {
-    val (newRights, newSize) = shrink(focus +: rights, size + WindowBuffer.meter.measureDeep(focus))
+    val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(focus))
     lefts match {
       case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, maxSize)
       case newFocus +: as           => MidBuffer(as, newRights, newFocus, newSize, maxSize)
@@ -49,7 +51,7 @@ trait WindowBuffer[A] {
   }
 
   private[util] def moveRightWithinWindow = {
-    val (newLefts, newSize) = shrink(focus +: lefts, size + WindowBuffer.meter.measureDeep(focus))
+    val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(focus))
     rights match {
       case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, maxSize)
       case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newSize, maxSize)
@@ -87,34 +89,34 @@ trait HasRight[A] extends WindowBuffer[A] {
 }
 
 private[util] final case class MidBuffer[A] private (
-  lefts:  Vector[A],
-  rights: Vector[A],
-  focus:        A,
-  size:         Long,
-  maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
+                                                      lefts:  Vector[A],
+                                                      rights: Vector[A],
+                                                      focus:        A,
+                                                      contentSize:         Long,
+                                                      maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
 private[util] final case class LeftEndBuffer[A] private (
-  rights: Vector[A],
-  focus:        A,
-  size:         Long,
-  maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
+                                                          rights: Vector[A],
+                                                          focus:        A,
+                                                          contentSize:         Long,
+                                                          maxSize:      Option[Long]) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
 
   val lefts  = Vector()
 }
 
 private[util] final case class RightEndBuffer[A] private (
-   lefts:  Vector[A],
-   focus:        A,
-   size:         Long,
-   maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
+                                                           lefts:  Vector[A],
+                                                           focus:        A,
+                                                           contentSize:         Long,
+                                                           maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
 
   val rights = Vector()
 }
 
 private[util] final case class DoubleEndBuffer[A] private (
-  focus:   A,
-  size:    Long,
-  maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
+                                                            focus:   A,
+                                                            contentSize:    Long,
+                                                            maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
 
   val lefts  = Vector()
   val rights = Vector()

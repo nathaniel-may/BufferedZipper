@@ -20,7 +20,6 @@ import Directions.{NP, N, P}
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
 //TODO arch - should test inputs be streams or buffered zippers?
-//TODO test BufferedZipper.toList actually minimizes monad effects when focus is at an arbitrary point
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
 object BufferedZipperProperties extends Properties("BufferedZipper") {
 
@@ -40,7 +39,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
           .map { _.flatMap { bz => move(path, bz).flatMap(zeroCounter) } }
         val effects = start.fold(0) { _.flatMap(_.toStream).exec(0) }
         val shouldBe = start.fold(0) { _.map { bz =>
-          inStream.size - (bz.buffer.lefts.size + 1 + bz.buffer.rights.size) }.eval(0) }
+          inStream.size - bz.buffer.size }.eval(0) }
         effects == shouldBe
     }
 
