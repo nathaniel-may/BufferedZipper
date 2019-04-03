@@ -1,13 +1,12 @@
-package zipper
+package util
 
 // Scala
-import scalaz.Monad
-import scalaz.State
+import scalaz.{Monad, State}
+import zipper.BufferedZipper
 
 // Project
-import BufferedZipperFunctions._
-import Generators.Path
-import Directions._
+import util.Directions._
+import util.Generators.Path
 
 object PropertyHelpers {
 

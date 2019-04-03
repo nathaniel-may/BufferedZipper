@@ -3,17 +3,17 @@ package zipper
 // Scalacheck
 import org.scalacheck.Prop.{forAll, forAllNoShrink}
 import org.scalacheck.{Arbitrary, Properties, Shrink}
-import Generators._
-import BufferTypes._
+import util.Generators._
+import util.BufferTypes._
 import util.Shrinkers
 
 // Scala
 import scalaz.Scalaz.Id
 
 // Project
-import BufferedZipperFunctions._
-import PropertyHelpers._
-import Directions.{N, P}
+import util.BufferedZipperFunctions._
+import util.PropertyHelpers._
+import util.Directions.{N, P}
 
 //TODO separate test file for WindowBuffer
 //TODO add test that buffer size should only increase for ints

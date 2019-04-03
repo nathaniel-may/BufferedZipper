@@ -1,14 +1,15 @@
-package zipper
+package util
 
 // Scalacheck
 import org.scalacheck.{Arbitrary, Gen}
+import zipper.BufferedZipper
 
 // Scala
 import scalaz.Monad
 
 // Project
-import BufferTypes._
-import Directions.{N, P, NP}
+import util.BufferTypes._
+import util.Directions.{N, NP, P}
 
 object Generators {
 

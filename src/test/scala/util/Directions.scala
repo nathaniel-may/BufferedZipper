@@ -1,4 +1,4 @@
-package zipper
+package util
 
 object Directions {
 

@@ -1,8 +1,9 @@
-package zipper
+package util
 
 import org.github.jamm.MemoryMeter
 import scalaz.Monad
-import Directions.{N, P, NP}
+import zipper.BufferedZipper
+import Directions.{N, NP, P}
 
 import scala.collection.immutable.Stream.Empty
 
