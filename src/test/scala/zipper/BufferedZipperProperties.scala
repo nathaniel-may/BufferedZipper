@@ -1,11 +1,11 @@
-package util
+package zipper
 
 // Scalacheck
 import org.scalacheck.Prop.{forAll, forAllNoShrink}
 import org.scalacheck.{Arbitrary, Properties, Shrink}
 import Generators._
 import BufferTypes._
-import testingUtil.Shrinkers
+import util.Shrinkers
 
 // Scala
 import scalaz.Scalaz.Id

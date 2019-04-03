@@ -1,4 +1,4 @@
-package util
+package zipper
 
 // Scala
 import scalaz.Monad

@@ -1,4 +1,4 @@
-package util
+package zipper
 
 import scalaz.{Monad, Zipper}
 import scalaz.Scalaz.Id

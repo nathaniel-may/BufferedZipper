@@ -1,4 +1,4 @@
-package util
+package zipper
 
 import org.github.jamm.MemoryMeter
 import scalaz.Monad

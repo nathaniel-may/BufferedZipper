@@ -1,4 +1,4 @@
-package util
+package zipper
 
 import org.github.jamm.MemoryMeter
 
@@ -12,12 +12,12 @@ trait WindowBuffer[A] {
   import WindowBuffer.meter
 
   val focus: A
-  private[util] val rights: Vector[A]
-  private[util] val lefts: Vector[A]
-  private[util] val contentSize: Long
-  private[util] val maxSize: Option[Long]
+  private[zipper] val rights: Vector[A]
+  private[zipper] val lefts: Vector[A]
+  private[zipper] val contentSize: Long
+  private[zipper] val maxSize: Option[Long]
 
-  private[util] lazy val size: Int = lefts.size + 1 + rights.size
+  private[zipper] lazy val size: Int = lefts.size + 1 + rights.size
 
   def contains(a: A): Boolean = lefts.contains(a) || rights.contains(a)
   def toList: List[A] = toVector.toList
@@ -30,25 +30,25 @@ trait WindowBuffer[A] {
   }
 
 
-  private[util] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
+  private[zipper] def shrink(storage: Vector[A], size: Long): (Vector[A], Long) =
     if (maxSize.fold(true) { size <= _ }) (storage, size)
     else storage.lift(storage.size - 1)
       .fold[(Vector[A], Long)]((Vector(), size)) { a =>
       shrink(storage.init, size - meter.measureDeep(a)) }
 
-  private[util] def shiftWindowLeft(a: A) = {
+  private[zipper] def shiftWindowLeft(a: A) = {
     val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(a))
     if (newRights.isEmpty) DoubleEndBuffer(a, maxSize)
     else                   LeftEndBuffer(newRights, a, newSize, maxSize)
   }
 
-  private[util] def shiftWindowRight(a: A) = {
+  private[zipper] def shiftWindowRight(a: A) = {
     val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(a))
     if (newLefts.isEmpty) DoubleEndBuffer(a, maxSize)
     else                  RightEndBuffer(newLefts, a, newSize, maxSize)
   }
 
-  private[util] def moveLeftWithinWindow = {
+  private[zipper] def moveLeftWithinWindow = {
     val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(focus))
     lefts match {
       case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, maxSize)
@@ -57,7 +57,7 @@ trait WindowBuffer[A] {
     }
   }
 
-  private[util] def moveRightWithinWindow = {
+  private[zipper] def moveRightWithinWindow = {
     val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(focus))
     rights match {
       case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, maxSize)
@@ -95,14 +95,14 @@ trait HasRight[A] extends WindowBuffer[A] {
   def next: WindowBuffer[A] = moveRightWithinWindow
 }
 
-private[util] final case class MidBuffer[A] private (
+private[zipper] final case class MidBuffer[A] private(
   lefts:  Vector[A],
   rights: Vector[A],
   focus:        A,
   contentSize:         Long,
   maxSize:      Option[Long]) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
-private[util] final case class LeftEndBuffer[A] private (
+private[zipper] final case class LeftEndBuffer[A] private(
   rights: Vector[A],
   focus:        A,
   contentSize:         Long,
@@ -111,7 +111,7 @@ private[util] final case class LeftEndBuffer[A] private (
   val lefts  = Vector()
 }
 
-private[util] final case class RightEndBuffer[A] private (
+private[zipper] final case class RightEndBuffer[A] private(
   lefts:  Vector[A],
   focus:        A,
   contentSize:         Long,
@@ -120,7 +120,7 @@ private[util] final case class RightEndBuffer[A] private (
   val rights = Vector()
 }
 
-private[util] final case class DoubleEndBuffer[A] private (
+private[zipper] final case class DoubleEndBuffer[A] private(
   focus:   A,
   contentSize:    Long,
   maxSize: Option[Long]) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {

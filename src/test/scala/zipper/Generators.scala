@@ -1,4 +1,4 @@
-package util
+package zipper
 
 // Scalacheck
 import org.scalacheck.{Arbitrary, Gen}

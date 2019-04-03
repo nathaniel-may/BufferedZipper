@@ -1,7 +1,7 @@
-package testingUtil
+package util
 
 import org.scalacheck.Shrink
-import util.Generators.UniqueStream
+import zipper.Generators.UniqueStream
 
 object Shrinkers {
 
