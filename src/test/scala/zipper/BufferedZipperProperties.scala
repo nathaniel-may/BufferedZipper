@@ -23,22 +23,6 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
   implicit val aBufferSize: Arbitrary[BufferSize] = Arbitrary(bufferSizeGen)
 
-  import java.io.File
-  def recursiveListFiles(path: String) = {
-    def go(f: File): Array[File] = {
-      val these = f.listFiles
-      these ++ these.filter(_.isDirectory).flatMap(go)
-    }
-
-    val f = new File(path.replaceFirst("^~", System.getProperty("user.home")))
-    go(f)
-  }
-
-  property("CI NONSENSE: FIND THE DEPENDENCY") = org.scalacheck.Prop.exists {
-    (b: Boolean) => recursiveListFiles("~/.ivy2").foreach(println)
-      true
-  }
-
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
     (inStream: Stream[Int], size: BufferSize, path: Path) => BufferedZipper[Int](inStream, size.max)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
