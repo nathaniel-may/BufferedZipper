@@ -3,7 +3,7 @@ package util
 // Scala
 import org.github.jamm.MemoryMeter
 import scalaz.{Monad, State}
-import zipper.BufferedZipper
+import zipper.{BufferedZipper, HasRight, NoRight, WindowBuffer}
 
 // Project
 import util.Directions._
@@ -63,5 +63,20 @@ object PropertyFunctions {
     }
 
     go(bz, path)
+  }
+
+  def toWindowBuffer[A](l: List[A], size: Option[Long]): Option[WindowBuffer[A]] = {
+    def go(ll: List[A], wb: WindowBuffer[A]): WindowBuffer[A] = ll match {
+      case Nil     => wb
+      case a :: as => wb match {
+        case buff: HasRight[A] => go(as, buff.next)
+        case buff: NoRight[A]  => go(as, buff.next(a))
+      }
+    }
+
+    l match {
+      case Nil     => None
+      case a :: as => Some(go(as, WindowBuffer(a, size)))
+    }
   }
 }
