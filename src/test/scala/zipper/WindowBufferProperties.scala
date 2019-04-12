@@ -9,10 +9,12 @@ import util.PropertyFunctions._
 
 object WindowBufferProperties extends Properties("WindowBuffer") {
   property("List and WindowBuffer.toList are the same with no buffer limit") = forAll {
-    (in: List[Int]) => toWindowBuffer(in, None).fold(in.isEmpty)(_.toList == in)
+    (in: List[Int]) => toWindowBuffer(in, None)
+      .fold(in.isEmpty) { _.toList == in }
   }
 
   property("List map f and WindowBuffer map f are the same with no buffer limit") = forAll {
-    (in: List[Int]) => toWindowBuffer(in, None).fold(in.isEmpty)(_.map(_+1).toList == in.map(_+1))
+    (in: List[Int]) => toWindowBuffer(in, None)
+      .fold(in.isEmpty) { _.map(_+1).toList == in.map(_+1) }
   }
 }
