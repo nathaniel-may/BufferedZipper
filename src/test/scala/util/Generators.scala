@@ -9,7 +9,8 @@ import scalaz.Monad
 
 // Project
 import util.Directions.{N, NP, P}
-import zipper.{Limit, Unlimited, Size, Bytes}
+import util.PropertyFunctions.toWindowBufferOnPath
+import zipper.{WindowBuffer, Limit, Unlimited, Size, Bytes}
 
 object Generators {
   type Path = Stream[NP]
@@ -36,6 +37,20 @@ object Generators {
   val pathGen: Gen[Stream[NP]] = Gen.listOf(
     Gen.pick(1, List(N, N, P)).flatMap(_.head))
     .flatMap(_.toStream)
+
+  def windowBufferByteLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = for {
+    limit <- Arbitrary.arbLong.arbitrary
+    buff  <- windowBufferGen(Bytes(limit))(eva, evsa)
+  } yield buff
+
+  def windowBufferGen[A](limit: Limit)(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = Gen.sized { size =>
+    for {
+      a    <- eva
+      sa   <- Gen.resize(size, evsa)
+      path <- Gen.resize(size, pathGen)
+      buff =  toWindowBufferOnPath(a, sa, limit, path)
+    } yield buff
+  }
 
   final case class WithEffect[M[_] : Monad]() {
     private val monadSyntax = implicitly[Monad[M]].monadSyntax

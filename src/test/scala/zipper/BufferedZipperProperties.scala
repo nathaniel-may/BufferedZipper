@@ -61,7 +61,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max) => measureBufferContents[Id, Int](bzz) <= max
+          case Bytes(max) => measureBufferContents(bzz.buffer) <= max
           case _          => false
         })
     }
@@ -69,7 +69,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("buffer is being used when there are at least two elements and space for at least one element") =
     forAllNoShrink(bZipGenMin[Int](2, bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
-          resultsOnPath[Id, Int, Long](bz, path, measureBufferContents[Id, Int])
+          resultsOnPath[Id, Int, Long](bz, path, bzz => measureBufferContents(bzz.buffer))
             .drop(1)
             .forall(_ > 0)
     }
@@ -77,7 +77,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("buffer is not being used for streams of one or less elements") =
     forAll(bZipGenMax[Int](1, bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
-        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) == 0)
+        assertOnPath[Id, Int](bz, path, bzz => measureBufferContents(bzz.buffer) == 0)
     }
 
   property("buffer never has duplicate items") =
@@ -104,7 +104,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max) => measureBufferContents[Id, Int](bzz) <= max
+          case Bytes(max) => measureBufferContents(bzz.buffer) <= max
           case _          => false
         })
     }

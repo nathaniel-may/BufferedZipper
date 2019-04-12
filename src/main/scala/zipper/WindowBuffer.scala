@@ -8,17 +8,16 @@ storage: [3, 2, 1, 0]   [0, 1]
 */
 
 
-trait WindowBuffer[+A] {
+sealed trait WindowBuffer[+A] {
   import WindowBuffer.meter
 
   val focus: A
   val limit: Limit
 
-  private[zipper] val rights: Vector[A]
-  private[zipper] val lefts: Vector[A]
+  private[zipper] val rights:    Vector[A]
+  private[zipper] val lefts:     Vector[A]
   private[zipper] val sizeBytes: Long
-
-  private[zipper] lazy val size: Int = lefts.size + 1 + rights.size
+  private[zipper] lazy val size: Int = lefts.size + 1 + rights.size // lazy to wait till concrete instance gets created
 
   def contains[B >: A](b: B): Boolean = lefts.contains(b) || rights.contains(b)
   def toList: List[A] = toVector.toList
@@ -30,12 +29,16 @@ trait WindowBuffer[+A] {
     case MidBuffer(ls, rs, foc, s, max)  => MidBuffer(ls.map(f), rs.map(f), f(foc), s, max)
   }
 
-
-  private[zipper] def shrink[B >: A](storage: Vector[B], size: Long): (Vector[B], Long) =
-    if (withinLimit) (storage, size)
-    else storage.lift(storage.size - 1)
-      .fold[(Vector[B], Long)]((Vector(), size)) { a =>
-      shrink(storage.init, size - meter.measureDeep(a)) }
+  private[zipper] def shrink[B >: A](storage: Vector[B], bytes: Long): (Vector[B], Long) = limit match {
+    case Unlimited => (storage, bytes)
+    case Bytes(max) =>
+      if (bytes <= max) (storage, bytes)
+      else storage
+        .lift(storage.size - 1)
+        .fold[(Vector[B], Long)]((Vector(), bytes)) { a =>
+          shrink(storage.init, bytes - meter.measureDeep(a)) }
+    case Size(_) => (storage, bytes) //TODO respect size limit
+  }
 
   private[zipper] def shiftWindowLeft[B >: A](b: B) = {
     val (newRights, newSize) = shrink(focus +: rights, sizeBytes + WindowBuffer.meter.measureDeep(b))
@@ -67,17 +70,10 @@ trait WindowBuffer[+A] {
     }
   }
 
-  private[zipper] def withinLimit: Boolean = limit match {
-    case Unlimited  => true
-    case Size(max)  => size <= max
-    case Bytes(max) => sizeBytes <= max
-  }
-
-
   override def toString: String = {
     def left = if (lefts.isEmpty) "" else lefts.reverse.mkString("", ", ", " ")
     def right = if (rights.isEmpty) "" else rights.mkString(" ", ", ", "")
-    s"WindowBuffer: [$left-> $focus <-$right]"
+    s"WindowBuffer: Limit: $limit, [$left-> $focus <-$right]"
   }
 }
 
@@ -87,19 +83,19 @@ object WindowBuffer {
   def apply[A](a: A, limits: Limit): DoubleEndBuffer[A] = DoubleEndBuffer(a, limits)
 }
 
-trait NoLeft[+A] extends WindowBuffer[A] {
+sealed trait NoLeft[+A] extends WindowBuffer[A] {
   def prev[B >: A](b: B): WindowBuffer[B] = shiftWindowLeft(b)
 }
 
-trait NoRight[+A] extends WindowBuffer[A] {
+sealed trait NoRight[+A] extends WindowBuffer[A] {
   def next[B >: A](b: B): WindowBuffer[B] = shiftWindowRight(b)
 }
 
-trait HasLeft[+A] extends WindowBuffer[A] {
+sealed trait HasLeft[+A] extends WindowBuffer[A] {
   def prev: WindowBuffer[A] = moveLeftWithinWindow
 }
 
-trait HasRight[+A] extends WindowBuffer[A] {
+sealed trait HasRight[+A] extends WindowBuffer[A] {
   def next: WindowBuffer[A] = moveRightWithinWindow
 }
 

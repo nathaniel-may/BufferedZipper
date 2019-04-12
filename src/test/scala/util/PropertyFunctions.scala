@@ -3,7 +3,7 @@ package util
 // Scala
 import org.github.jamm.MemoryMeter
 import scalaz.{Monad, State}
-import zipper.{BufferedZipper, HasRight, NoRight, WindowBuffer}
+import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
 
 // Project
 import util.Directions._
@@ -20,8 +20,8 @@ object PropertyFunctions {
   def zeroCounter[A](a: A): State[Int, A] =
     State.modify[Int](_ => 0).map(_ => a)
 
-  def measureBufferContents[M[_]: Monad, A](bs: BufferedZipper[M, A]): Long =
-    bs.buffer.toList.map(meter.measureDeep).sum - meter.measureDeep(bs.buffer.focus)
+  def measureBufferContents[A](buff: WindowBuffer[A]): Long =
+    buff.toList.map(meter.measureDeep).sum - meter.measureDeep(buff.focus)
 
   def assertOnPath[M[_] : Monad, A](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => Boolean): M[Boolean] = {
     val syntax = implicitly[Monad[M]].monadSyntax
@@ -65,6 +65,22 @@ object PropertyFunctions {
 
     go(bz, path)
   }
+
+  def toWindowBufferOnPath[A](a:A, l: Stream[A], limit: Limit, path: Path): WindowBuffer[A] = {
+    def go(ll: Stream[A], path: Path, buff: WindowBuffer[A]): WindowBuffer[A] = (ll, path) match {
+      case (aa @ a #:: as, pp @ step #:: steps) => (step, buff) match {
+        case (N, b: NoRight[A])  => go(as, steps, b.next(a))
+        case (N, b: HasRight[A]) => go(aa, pp, b.next)
+        case (P, b: NoLeft[A])   => go(as, steps, b.prev(a))
+        case (P, b: HasLeft[A])  => go(aa, pp, b.prev)
+      }
+      case _ => buff
+    }
+
+    go(l, path, WindowBuffer(a, limit))
+  }
+
+
 
   def toWindowBuffer[A](l: List[A], limit: Limit): Option[WindowBuffer[A]] = {
     def go(ll: List[A], wb: WindowBuffer[A]): WindowBuffer[A] = ll match {
