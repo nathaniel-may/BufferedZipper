@@ -9,14 +9,14 @@ storage: [3, 2, 1, 0]   [0, 1]
 
 
 trait WindowBuffer[+A] {
-  import WindowBuffer.{meter, Limits}
+  import WindowBuffer.meter
 
   val focus: A
-  val limits: Limits
+  val limit: Limit
 
   private[zipper] val rights: Vector[A]
   private[zipper] val lefts: Vector[A]
-  private[zipper] val contentSize: Long
+  private[zipper] val sizeBytes: Long
 
   private[zipper] lazy val size: Int = lefts.size + 1 + rights.size
 
@@ -32,40 +32,47 @@ trait WindowBuffer[+A] {
 
 
   private[zipper] def shrink[B >: A](storage: Vector[B], size: Long): (Vector[B], Long) =
-    if (limits.maxBytes.fold(true) { size <= _ }) (storage, size)
+    if (withinLimit) (storage, size)
     else storage.lift(storage.size - 1)
       .fold[(Vector[B], Long)]((Vector(), size)) { a =>
       shrink(storage.init, size - meter.measureDeep(a)) }
 
   private[zipper] def shiftWindowLeft[B >: A](b: B) = {
-    val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(b))
-    if (newRights.isEmpty) DoubleEndBuffer(b, limits)
-    else                   LeftEndBuffer(newRights, b, newSize, limits)
+    val (newRights, newSize) = shrink(focus +: rights, sizeBytes + WindowBuffer.meter.measureDeep(b))
+    if (newRights.isEmpty) DoubleEndBuffer(b, limit)
+    else                   LeftEndBuffer(newRights, b, newSize, limit)
   }
 
   private[zipper] def shiftWindowRight[B >: A](b: B) = {
-    val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(b))
-    if (newLefts.isEmpty) DoubleEndBuffer(b, limits)
-    else                  RightEndBuffer(newLefts, b, newSize, limits)
+    val (newLefts, newSize) = shrink(focus +: lefts, sizeBytes + WindowBuffer.meter.measureDeep(b))
+    if (newLefts.isEmpty) DoubleEndBuffer(b, limit)
+    else                  RightEndBuffer(newLefts, b, newSize, limit)
   }
 
   private[zipper] def moveLeftWithinWindow = {
-    val (newRights, newSize) = shrink(focus +: rights, contentSize + WindowBuffer.meter.measureDeep(focus))
+    val (newRights, newSize) = shrink(focus +: rights, sizeBytes + WindowBuffer.meter.measureDeep(focus))
     lefts match {
-      case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, limits)
-      case newFocus +: as           => MidBuffer(as, newRights, newFocus, newSize, limits)
+      case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, limit)
+      case newFocus +: as           => MidBuffer(as, newRights, newFocus, newSize, limit)
       case _ => this // unreachable if all goes well
     }
   }
 
   private[zipper] def moveRightWithinWindow = {
-    val (newLefts, newSize) = shrink(focus +: lefts, contentSize + WindowBuffer.meter.measureDeep(focus))
+    val (newLefts, newSize) = shrink(focus +: lefts, sizeBytes + WindowBuffer.meter.measureDeep(focus))
     rights match {
-      case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, limits)
-      case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newSize, limits)
+      case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, limit)
+      case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newSize, limit)
       case _ => this // unreachable if all goes well
     }
   }
+
+  private[zipper] def withinLimit: Boolean = limit match {
+    case Unlimited  => true
+    case Size(max)  => size <= max
+    case Bytes(max) => sizeBytes <= max
+  }
+
 
   override def toString: String = {
     def left = if (lefts.isEmpty) "" else lefts.reverse.mkString("", ", ", " ")
@@ -77,21 +84,7 @@ trait WindowBuffer[+A] {
 object WindowBuffer {
   val meter = new MemoryMeter
 
-  def apply[A](a: A, limits: Limits): DoubleEndBuffer[A] = DoubleEndBuffer(a, limits)
-
-  final case class Limits private (size: Option[Int], maxBytes: Option[Long])
-  object Limits {
-    val none: Limits = Limits(None, None)
-
-    def apply(size: Option[Int], maxBytes: Option[Long]): Limits =
-      new Limits(size.map(nonNeg(_)), maxBytes.map(nonNeg(_)))
-
-    private def nonNeg[A : Numeric](n: A): A = {
-      val syntax = implicitly[Numeric[A]]
-      import syntax._
-      if (lt(n, zero)) zero else n
-    }
-  }
+  def apply[A](a: A, limits: Limit): DoubleEndBuffer[A] = DoubleEndBuffer(a, limits)
 }
 
 trait NoLeft[+A] extends WindowBuffer[A] {
@@ -111,43 +104,41 @@ trait HasRight[+A] extends WindowBuffer[A] {
 }
 
 private[zipper] final case class MidBuffer[A] private(
-  lefts:       Vector[A],
-  rights:      Vector[A],
-  focus:       A,
-  contentSize: Long,
-  limits:      WindowBuffer.Limits) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
+  lefts:     Vector[A],
+  rights:    Vector[A],
+  focus:     A,
+  sizeBytes: Long,
+  limit:     Limit) extends WindowBuffer[A] with HasLeft[A] with HasRight[A]
 
 private[zipper] final case class LeftEndBuffer[A] private(
-  rights:      Vector[A],
-  focus:       A,
-  contentSize: Long,
-  limits:      WindowBuffer.Limits) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
+  rights:    Vector[A],
+  focus:     A,
+  sizeBytes: Long,
+  limit:     Limit) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
 
   val lefts  = Vector()
 }
 
 private[zipper] final case class RightEndBuffer[A] private(
-  lefts:       Vector[A],
-  focus:       A,
-  contentSize: Long,
-  limits:      WindowBuffer.Limits) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
+  lefts:     Vector[A],
+  focus:     A,
+  sizeBytes: Long,
+  limit:     Limit) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
 
   val rights = Vector()
 }
 
 private[zipper] final case class DoubleEndBuffer[A] private(
-  focus:       A,
-  contentSize: Long,
-  limits:      WindowBuffer.Limits) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
+  focus:     A,
+  sizeBytes: Long,
+  limit:     Limit) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
 
   val lefts  = Vector()
   val rights = Vector()
 }
 
 object DoubleEndBuffer {
-  import WindowBuffer.Limits
-
-  def apply[A](a: A, limits: Limits): DoubleEndBuffer[A] = {
+  def apply[A](a: A, limits: Limit): DoubleEndBuffer[A] = {
     new DoubleEndBuffer[A](a, 0L, limits)
   }
 }

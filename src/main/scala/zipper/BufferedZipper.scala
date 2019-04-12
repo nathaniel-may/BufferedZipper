@@ -54,21 +54,18 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
 }
 
 object BufferedZipper {
-  type Limits = WindowBuffer.Limits
-
-  def apply[M[_]: Monad, A](stream: Stream[M[A]], limits: Limits): Option[M[BufferedZipper[M, A]]] = {
+  def apply[M[_]: Monad, A](stream: Stream[M[A]], limit: Limit): Option[M[BufferedZipper[M, A]]] = {
     val monadSyntax = implicitly[Monad[M]].monadSyntax
     import monadSyntax._
 
     stream.toZipper
       .map { zip => zip.focus
-        .map { t => new BufferedZipper(WindowBuffer(t, limits), zip) } }
+        .map { t => new BufferedZipper(WindowBuffer(t, limit), zip) } }
   }
 
-  def apply[A](stream: Stream[A], limits: Limits): Option[BufferedZipper[Id, A]] =
+  def apply[A](stream: Stream[A], limit: Limit): Option[BufferedZipper[Id, A]] =
     stream.toZipper
-      .map { zip => new BufferedZipper[Id, A](WindowBuffer(zip.focus, limits), implicitly[Monad[Id]].point(zip)) }
-
+      .map { zip => new BufferedZipper[Id, A](WindowBuffer(zip.focus, limit), implicitly[Monad[Id]].point(zip)) }
 }
 
 object BufferStats {
