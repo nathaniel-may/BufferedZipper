@@ -21,6 +21,6 @@ object Shrinkers {
     Shrink.shrink(input.bz.toStream)
       .filter(isUnique(_))
       .filter(_.nonEmpty)
-      .map { s => UniqueBZip(BufferedZipper(s, input.bz.buffer.maxSize).get) }
+      .map { s => UniqueBZip(BufferedZipper(s, input.bz.buffer.limits).get) }
   }
 }

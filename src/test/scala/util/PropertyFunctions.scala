@@ -8,6 +8,7 @@ import zipper.{BufferedZipper, HasRight, NoRight, WindowBuffer}
 // Project
 import util.Directions._
 import util.Generators.Path
+import WindowBuffer.Limits
 
 object PropertyFunctions {
   type Counter[A] = State[Int, A]
@@ -65,7 +66,7 @@ object PropertyFunctions {
     go(bz, path)
   }
 
-  def toWindowBuffer[A](l: List[A], size: Option[Long]): Option[WindowBuffer[A]] = {
+  def toWindowBuffer[A](l: List[A], limits: Limits): Option[WindowBuffer[A]] = {
     def go(ll: List[A], wb: WindowBuffer[A]): WindowBuffer[A] = ll match {
       case Nil     => wb
       case a :: as => wb match {
@@ -76,7 +77,7 @@ object PropertyFunctions {
 
     l match {
       case Nil     => None
-      case a :: as => Some(go(as, WindowBuffer(a, size)))
+      case a :: as => Some(go(as, WindowBuffer(a, limits)))
     }
   }
 }

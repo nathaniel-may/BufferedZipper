@@ -11,6 +11,7 @@ import scalaz.Scalaz.Id
 // Project
 import util.PropertyFunctions._
 import util.Directions.{N, P}
+import WindowBuffer.Limits
 
 //TODO separate test file for WindowBuffer
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
@@ -21,10 +22,10 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   import noEffect.{bZipGen, bZipGenMax, bZipGenMin, uniqueBZipGen} // allows for these functions to be called without explicit Id effect
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
-  implicit val aBufferSize: Arbitrary[BufferSize] = Arbitrary(bufferSizeGen)
+  implicit val aBufferSize: Arbitrary[Limits] = Arbitrary(bufferSizeGen)
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
-    (inStream: Stream[Int], size: BufferSize, path: Path) => BufferedZipper[Int](inStream, size.max)
+    (inStream: Stream[Int], limits: Limits, path: Path) => BufferedZipper[Int](inStream, limits)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
@@ -60,7 +61,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("buffer limit is never exceeded") =
     forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
-        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) <= bz.buffer.maxSize.get)
+        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) <= bz.buffer.limits.maxBytes.get)
     }
 
   property("buffer is being used when there are at least two elements and space for at least one element") =
@@ -100,7 +101,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property("buffer limit is never exceeded") =
     forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
-        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) <= bz.buffer.maxSize.get)
+        assertOnPath[Id, Int](bz, path, measureBufferContents[Id, Int](_) <= bz.buffer.limits.maxBytes.get)
     }
 
   property ("buffer evicts the correct elements") =
