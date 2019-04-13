@@ -9,6 +9,7 @@ import org.scalacheck.Arbitrary.arbInt
 import util.PropertyFunctions._
 import util.Generators._
 
+// TODO add a new property file that can run without the jvm -javaagent flag set
 object WindowBufferProperties extends Properties("WindowBuffer") {
 
   property("List and WindowBuffer.toList are the same with no buffer limit") = forAll {
