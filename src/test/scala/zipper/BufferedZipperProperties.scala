@@ -61,7 +61,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max) => measureBufferContents(bzz.buffer) <= max
+          case Bytes(max, _) => measureBufferContents(bzz.buffer) <= max
           case _          => false
         })
     }
@@ -104,7 +104,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max) => measureBufferContents(bzz.buffer) <= max
+          case Bytes(max, _) => measureBufferContents(bzz.buffer) <= max
           case _          => false
         })
     }
