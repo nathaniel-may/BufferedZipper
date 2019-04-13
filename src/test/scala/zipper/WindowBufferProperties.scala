@@ -9,7 +9,7 @@ import org.scalacheck.Arbitrary.arbInt
 import util.PropertyFunctions._
 import util.Generators._
 
-// TODO add a new property file that can run without the jvm -javaagent flag set
+
 object WindowBufferProperties extends Properties("WindowBuffer") {
 
   property("List and WindowBuffer.toList are the same with no buffer limit") = forAll {
@@ -26,6 +26,14 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
     forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Bytes(max, _) => measureBufferContents(buff) <= max
+        case _             => false
+      }
+    }
+
+  property("byte size estimate is accurate") =
+    forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
+      (buff: WindowBuffer[Int]) => buff.limit match {
+        case Bytes(_, est) => measureBufferContents(buff) == est
         case _             => false
       }
     }

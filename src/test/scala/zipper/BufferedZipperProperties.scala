@@ -12,7 +12,6 @@ import scalaz.Scalaz.Id
 import util.PropertyFunctions._
 import util.Directions.{N, P}
 
-//TODO separate test file for WindowBuffer
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
 //TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
