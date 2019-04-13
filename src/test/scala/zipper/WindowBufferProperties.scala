@@ -25,8 +25,8 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
   property("never exceeds byte limit") =
     forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
-        case Bytes(max) => measureBufferContents(buff) <= max
-        case _          => false
+        case Bytes(max, _) => measureBufferContents(buff) <= max
+        case _             => false
       }
     }
 
