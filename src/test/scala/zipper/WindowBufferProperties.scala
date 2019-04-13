@@ -7,7 +7,7 @@ import org.scalacheck.Arbitrary.arbInt
 
 // Project
 import util.PropertyFunctions._
-import util.Generators.{intStreamGen, windowBufferByteLimitGen}
+import util.Generators._
 
 object WindowBufferProperties extends Properties("WindowBuffer") {
 
@@ -26,6 +26,14 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Bytes(max) => measureBufferContents(buff) <= max
         case _          => false
+      }
+    }
+
+  property("never exceeds size limit") =
+    forAll(windowBufferSizeLimitGen()(arbInt.arbitrary, intStreamGen)) {
+      (buff: WindowBuffer[Int]) => buff.limit match {
+        case Size(max) => buff.size <= max
+        case _         => false
       }
     }
 }

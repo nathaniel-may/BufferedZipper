@@ -17,7 +17,10 @@ sealed trait WindowBuffer[+A] {
   private[zipper] val rights:    Vector[A]
   private[zipper] val lefts:     Vector[A]
   private[zipper] val sizeBytes: Long
-  private[zipper] lazy val size: Int = lefts.size + 1 + rights.size // lazy to wait till concrete instance gets created
+
+  // lazy to wait till concrete instance gets created
+  // doesn't include focus so that min size of 0 can still process workloads. sizeBytes doesn't contain it either.
+  private[zipper] lazy val size: Int = lefts.size + rights.size
 
   def contains[B >: A](b: B): Boolean = lefts.contains(b) || rights.contains(b)
   def toList: List[A] = toVector.toList
@@ -29,31 +32,35 @@ sealed trait WindowBuffer[+A] {
     case MidBuffer(ls, rs, foc, s, max)  => MidBuffer(ls.map(f), rs.map(f), f(foc), s, max)
   }
 
-  private[zipper] def shrink[B >: A](storage: Vector[B], bytes: Long): (Vector[B], Long) = limit match {
+  private[zipper] def shrink[B >: A](storage: Vector[B], size: Int, bytes: Long): (Vector[B], Long) = limit match {
     case Unlimited => (storage, bytes)
+
     case Bytes(max) =>
       if (bytes <= max) (storage, bytes)
       else storage
         .lift(storage.size - 1)
         .fold[(Vector[B], Long)]((Vector(), bytes)) { a =>
-          shrink(storage.init, bytes - meter.measureDeep(a)) }
-    case Size(_) => (storage, bytes) //TODO respect size limit
+          shrink(storage.init, size - 1, bytes - meter.measureDeep(a)) }
+
+    case Size(max) =>
+      if (size <= max) (storage, bytes)
+      else (storage.take(max), bytes)
   }
 
   private[zipper] def shiftWindowLeft[B >: A](b: B) = {
-    val (newRights, newSize) = shrink(focus +: rights, sizeBytes + WindowBuffer.meter.measureDeep(b))
+    val (newRights, newSize) = shrink(focus +: rights, size + 1, sizeBytes + WindowBuffer.meter.measureDeep(b)) //TODO plus focus not b...?
     if (newRights.isEmpty) DoubleEndBuffer(b, limit)
     else                   LeftEndBuffer(newRights, b, newSize, limit)
   }
 
   private[zipper] def shiftWindowRight[B >: A](b: B) = {
-    val (newLefts, newSize) = shrink(focus +: lefts, sizeBytes + WindowBuffer.meter.measureDeep(b))
+    val (newLefts, newSize) = shrink(focus +: lefts, size + 1, sizeBytes + WindowBuffer.meter.measureDeep(b)) //TODO plus focus not b...?
     if (newLefts.isEmpty) DoubleEndBuffer(b, limit)
     else                  RightEndBuffer(newLefts, b, newSize, limit)
   }
 
   private[zipper] def moveLeftWithinWindow = {
-    val (newRights, newSize) = shrink(focus +: rights, sizeBytes + WindowBuffer.meter.measureDeep(focus))
+    val (newRights, newSize) = shrink(focus +: rights, size, sizeBytes + WindowBuffer.meter.measureDeep(focus))
     lefts match {
       case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newSize, limit)
       case newFocus +: as           => MidBuffer(as, newRights, newFocus, newSize, limit)
@@ -62,7 +69,7 @@ sealed trait WindowBuffer[+A] {
   }
 
   private[zipper] def moveRightWithinWindow = {
-    val (newLefts, newSize) = shrink(focus +: lefts, sizeBytes + WindowBuffer.meter.measureDeep(focus))
+    val (newLefts, newSize) = shrink(focus +: lefts, size, sizeBytes + WindowBuffer.meter.measureDeep(focus))
     rights match {
       case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newSize, limit)
       case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newSize, limit)
