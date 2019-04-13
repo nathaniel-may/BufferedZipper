@@ -56,16 +56,6 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       } yield prev.focus) == zipper.toStream.headOption
     }
 
-  // TODO measureBufferContents is exponential
-  property("buffer limit is never exceeded") =
-    forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
-      (bz: BufferedZipper[Id, Int], path: Path) =>
-        assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max, _) => measureBufferContents(bzz.buffer) <= max
-          case _          => false
-        })
-    }
-
   property("buffer is being used when there are at least two elements and space for at least one element") =
     forAllNoShrink(bZipGenMin[Int](2, bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
