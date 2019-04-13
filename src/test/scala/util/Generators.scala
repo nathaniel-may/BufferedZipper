@@ -24,8 +24,12 @@ object Generators {
     .flatMap { bSize => Gen.choose(0, 9).map { n => if (n == 0) Unlimited else bSize } }
 
 
-  def bufferGenAtLeast(min: Long): Gen[Limit] = Gen.sized { size =>
+  def bufferGenBytesAtLeast(min: Long): Gen[Limit] = Gen.sized { size =>
     Gen.const(Bytes(16L * size + min))
+  }
+
+  def bufferGenSizeAtLeast(min: Int): Gen[Limit] = Gen.sized { size =>
+    Gen.const(Size(size + min))
   }
 
   def bufferGenNoBiggerThan(max: Long): Gen[Limit] = Gen.sized { size =>

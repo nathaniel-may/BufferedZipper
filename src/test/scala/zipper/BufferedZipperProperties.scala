@@ -34,7 +34,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
         val effects = start.flatMap(_.toStream).exec(0)
         val shouldBe = start.map { bz =>
-          bz.toStream.eval(0).size - bz.buffer.size }.eval(0)
+          bz.toStream.eval(0).size - bz.buffer.size - 1 }.eval(0)
         effects == shouldBe
     }
 
@@ -44,7 +44,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
         val effects = start.flatMap(_.map(_ + 1).toStream).exec(0)
         val shouldBe = start.map { bz =>
-          bz.toStream.eval(0).size - bz.buffer.size }.eval(0)
+          bz.toStream.eval(0).size - bz.buffer.size - 1 }.eval(0)
         effects == shouldBe
     }
 
@@ -58,7 +58,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   // TODO measureBufferContents is exponential
   property("buffer limit is never exceeded") =
-    forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
           case Bytes(max) => measureBufferContents(bzz.buffer) <= max
@@ -67,7 +67,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer is being used when there are at least two elements and space for at least one element") =
-    forAllNoShrink(bZipGenMin[Int](2, bufferGenAtLeast(16)), pathGen) {
+    forAllNoShrink(bZipGenMin[Int](2, bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
           resultsOnPath[Id, Int, Long](bz, path, bzz => measureBufferContents(bzz.buffer))
             .drop(1)
@@ -75,33 +75,33 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("buffer is not being used for streams of one or less elements") =
-    forAll(bZipGenMax[Int](1, bufferGenAtLeast(16)), pathGen) {
+    forAll(bZipGenMax[Int](1, bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => measureBufferContents(bzz.buffer) == 0)
     }
 
   property("buffer never has duplicate items") =
-    forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(uniqueBZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (in: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](in, path, bz =>
           bz.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
     }
 
   property("buffer is always a segment of the input") =
-      forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+      forAll(uniqueBZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
         (in: BufferedZipper[Id, Int], path: Path) =>
           assertOnPath[Id, Int](in, path, bz =>
             in.toStream.containsSlice(bz.buffer.toList))
       }
 
   property("buffer never contains the focus") =
-    forAll(uniqueBZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(uniqueBZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (in: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](in, path, bz => !bz.buffer.contains(bz.focus))
     }
 
-  property("buffer limit is never exceeded") =
-    forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+  property("buffer byte limit is never exceeded") =
+    forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
           case Bytes(max) => measureBufferContents(bzz.buffer) <= max
@@ -109,8 +109,17 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         })
     }
 
+  property("buffer size limit is never exceeded") =
+    forAll(bZipGen[Int](bufferGenSizeAtLeast(16)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
+          case Size(max) => bzz.buffer.size <= max
+          case _         => false
+        })
+    }
+
   property ("buffer evicts the correct elements") =
-    forAll(bZipGen[Int](bufferGenAtLeast(16)), pathGen) {
+    forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         val (lrs, realPath) = resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](bz, path, bz2 => (bz2.buffer.lefts, bz.buffer.rights))
         lrs.zip(lrs.drop(1))
@@ -128,7 +137,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     }
 
   property("with unlimited buffer, effect happens at most once per element") =
-    forAll(WithEffect[Counter].bZipGen[Int](bufferGenAtLeast(16), bumpCounter), pathGen) {
+    forAll(WithEffect[Counter].bZipGen[Int](bufferGenBytesAtLeast(16), bumpCounter), pathGen) {
       (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
         cbz.flatMap(move(path, _)).exec(0) <= cbz.flatMap(_.toStream).eval(0).size
     }
