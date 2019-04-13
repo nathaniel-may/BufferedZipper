@@ -42,6 +42,9 @@ object Generators {
     Gen.pick(1, List(N, N, P)).flatMap(_.head))
     .flatMap(_.toStream)
 
+  def windowBufferNoLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] =
+    windowBufferGen(Unlimited)(eva, evsa)
+
   def windowBufferSizeLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = for {
     limit <- Arbitrary.arbInt.arbitrary
     buff  <- windowBufferGen(Size(limit))(eva, evsa)

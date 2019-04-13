@@ -4,6 +4,7 @@ package zipper
 import org.scalacheck.Prop.forAll
 import org.scalacheck.Properties
 import org.scalacheck.Arbitrary.arbInt
+import org.scalacheck.Gen
 
 // Scala
 import scala.util.Try
@@ -31,6 +32,14 @@ object NoJavaAgentProperties extends Properties("With no javaagent set") {
       }
     }
 
+  property("a window buffer doesn't crash with no limit") =
+    forAll(windowBufferNoLimitGen()(arbInt.arbitrary, intStreamGen)) {
+      (buff: WindowBuffer[Int]) => buff.limit match {
+        case Unlimited => true
+        case _         => false
+      }
+    }
+
   property("a BufferedZipper throws with a byte limit on creation") = forAll {
     s: Stream[Int] => Try(BufferedZipper[Id, Int](s, Bytes(16))).isFailure
   }
@@ -40,6 +49,15 @@ object NoJavaAgentProperties extends Properties("With no javaagent set") {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
           case Size(max) => bzz.buffer.size <= max
+          case _         => false
+        })
+    }
+
+  property("a BufferedZipper doesn't crash with no limit") =
+    forAll(bZipGen[Int](Gen.const(Unlimited)), pathGen) {
+      (bz: BufferedZipper[Id, Int], path: Path) =>
+        assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
+          case Unlimited => true
           case _         => false
         })
     }
