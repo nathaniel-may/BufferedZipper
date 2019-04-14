@@ -22,5 +22,5 @@ val home = System.getProperty("user.home")
 def groupByJavaAgent(allTests: Seq[TestDefinition]) = allTests
   .groupBy(t => t.name.contains("NoJavaAgent") || t.name.contains("no javaagent"))
   .map { case (true,  tests) => Group("NoAgent",   tests, SubProcess(ForkOptions()))
-         case (false, tests) => Group("JammAgent", tests, SubProcess(jammForkOpts)) } // TODO change to jammForkOpts
+         case (false, tests) => Group("JammAgent", tests, SubProcess(ForkOptions())) } // TODO change to jammForkOpts
   .toSeq
