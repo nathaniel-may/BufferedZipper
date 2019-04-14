@@ -7,8 +7,8 @@ jobs:
       - image: circleci/openjdk:8-jdk
     steps:
       - checkout
-      #- restore_cache:
-      #    key: scala-library-dependencies-{{ checksum "project/Build.scala" }}
+      - restore_cache:
+          key: scala-library-dependencies-{{ checksum "project/Build.scala" }}
       - run: sbt test:compile
       - save_cache:
           paths: [ "~/.m2", "~/.ivy2", "~/.cache/coursier" ]
