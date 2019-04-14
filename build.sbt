@@ -1,5 +1,5 @@
-name := "rand-pix"
-version := "0.1"
+name         := "rand-pix"
+version      := "0.1"
 scalaVersion := "2.12.8"
 
 import sbt.Tests.{Group, SubProcess}
