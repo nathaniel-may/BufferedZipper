@@ -8,11 +8,11 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: scala-library-dependencies-{{ checksum "build.sbt" }}
+          key: scala-library-dependencies-{{ checksum "project/build.scala" }}
       - run: sbt test:compile
       - save_cache:
           paths: [ "~/.m2", "~/.ivy2", "~/.cache/coursier" ]
-          key: scala-library-dependencies-{{ checksum "build.sbt" }}
+          key: scala-library-dependencies-{{ checksum "project/build.scala" }}
       - run: sbt clean coverage test coverageReport
       - codecov/upload:
           file: /home/circleci/project/target/scala-2.12/scoverage-report/scoverage.xml
