@@ -16,8 +16,8 @@ lazy val randpix = (project in file("."))
 
 val home = System.getProperty("user.home")
 
-val jammForkOpts = ForkOptions()
-  .withRunJVMOptions(Vector(s"-javaagent:$home/.ivy2/cache/com.github.jbellis/jamm/jars/jamm-0.3.3.jar"))
+//val jammForkOpts = ForkOptions()
+//  .withRunJVMOptions(Vector(s"-javaagent:$home/.ivy2/cache/com.github.jbellis/jamm/jars/jamm-0.3.3.jar"))
 
 def groupByJavaAgent(allTests: Seq[TestDefinition]) = allTests
   .groupBy(t => t.name.contains("NoJavaAgent") || t.name.contains("no javaagent"))
