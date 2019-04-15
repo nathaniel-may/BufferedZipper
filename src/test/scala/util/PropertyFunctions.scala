@@ -1,9 +1,12 @@
 package util
 
 // Scala
-import org.github.jamm.MemoryMeter
 import scalaz.{Monad, State}
 import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
+import scala.language.higherKinds
+
+// Java
+import org.github.jamm.MemoryMeter
 
 // Project
 import util.Directions._

@@ -1,9 +1,12 @@
 package zipper
 
+// Scala
 import scalaz.{Monad, Zipper}
 import scalaz.Scalaz.Id
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
-import scalaz._, Scalaz._ //TODO minimize for sequence
+import scala.language.higherKinds
+
+// Java
 import org.github.jamm.MemoryMeter
 
 

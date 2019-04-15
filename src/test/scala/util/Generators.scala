@@ -6,6 +6,7 @@ import zipper.BufferedZipper
 
 // Scala
 import scalaz.Monad
+import scala.language.higherKinds
 
 // Project
 import util.Directions.{N, NP, P}
