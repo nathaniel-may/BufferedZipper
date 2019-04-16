@@ -23,7 +23,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   implicit val aBufferSize: Arbitrary[Limit] = Arbitrary(bufferSizeGen)
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
-    (inStream: Stream[Int], limits: Limit, path: Path) => BufferedZipper[Int](inStream, limits)
+    (inStream: Stream[Int], limits: Limit, path: Path) => BufferedZipper[Id, Int](inStream, limits)
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 

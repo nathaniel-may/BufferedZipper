@@ -2,7 +2,7 @@ package zipper
 
 // Scala
 import scalaz.{Monad, Zipper}
-import scalaz.Scalaz.Id
+import scalaz.OptionT
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import scala.language.higherKinds
 
@@ -24,13 +24,29 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
     }
   }
 
+  def nextT: OptionT[M, BufferedZipper[M, A]] = OptionT(zipper.next match {
+    case None        => point(None: Option[BufferedZipper[M, A]])
+    case Some(zNext) => buffer match {
+      case buff: HasRight[A] => point(Some(BufferedZipper(buff.next, zNext)))
+      case buff: NoRight[A]  => zNext.focus.map(focus => Some(BufferedZipper(buff.next(focus), zNext)))
+    }
+  })
+
   def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
     buffer match {
       case buff: HasLeft[A] => point(BufferedZipper(buff.prev, zPrev))
       case buff: NoLeft[A]  => zPrev.focus.map(focus => BufferedZipper(buff.prev(focus), zPrev))
     }
   }
-  
+
+  def prevT: OptionT[M, BufferedZipper[M, A]] = OptionT(zipper.next match {
+    case None        => point(None: Option[BufferedZipper[M, A]])
+    case Some(zPrev) => buffer match {
+      case buff: HasLeft[A] => point(Some(BufferedZipper(buff.prev, zPrev)))
+      case buff: NoLeft[A]  => zPrev.focus.map(focus => Some(BufferedZipper(buff.prev(focus), zPrev)))
+    }
+  })
+
   def map[B](f: A => B): BufferedZipper[M, B] =
     new BufferedZipper(buffer.map(f), zipper.map(_.map(f)))
 
@@ -66,9 +82,16 @@ object BufferedZipper {
         .map { t => new BufferedZipper(WindowBuffer(t, limit), zip) } }
   }
 
-  def apply[A](stream: Stream[A], limit: Limit): Option[BufferedZipper[Id, A]] =
-    stream.toZipper
-      .map { zip => new BufferedZipper[Id, A](WindowBuffer(zip.focus, limit), implicitly[Monad[Id]].point(zip)) }
+  def applyT[M[_]: Monad, A](stream: Stream[M[A]], limit: Limit): OptionT[M, BufferedZipper[M, A]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    stream.toZipper match {
+      case None      => OptionT(point(None))
+      case Some(zip) => OptionT(zip.focus.map { t =>
+        Some(new BufferedZipper(WindowBuffer(t, limit), zip)) } )
+    }
+  }
 }
 
 object BufferStats {
