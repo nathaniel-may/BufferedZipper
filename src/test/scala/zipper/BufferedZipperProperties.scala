@@ -3,7 +3,6 @@ package zipper
 // Scalacheck
 import org.scalacheck.Prop.{forAll, forAllNoShrink}
 import org.scalacheck.{Arbitrary, Properties}
-import util.Generators._
 
 // Scala
 import scalaz.Scalaz.Id
@@ -11,6 +10,7 @@ import scalaz.Scalaz.Id
 // Project
 import util.PropertyFunctions._
 import util.Directions.{N, P}
+import util.Generators._
 
 //TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
 //     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
@@ -34,6 +34,16 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         val effects = start.flatMap(_.toStream).exec(0)
         val shouldBe = start.map { bz =>
           bz.toStream.eval(0).size - bz.buffer.size - 1 }.eval(0)
+        effects == shouldBe
+    }
+
+  property("toStream doesn't minimize effectful calls witih no buffer") =
+    forAll(WithEffect[Counter].bZipGen[Int](noBuffer, bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
+        val effects = start.flatMap(_.toStream).exec(0)
+        val shouldBe = start.map { bz =>
+          bz.toStream.eval(0).size - 1 }.eval(0)
         effects == shouldBe
     }
 

@@ -39,6 +39,8 @@ object Generators {
     Gen.const(Bytes(if (cap > realMax) realMax else cap))
   }
 
+  val noBuffer: Gen[Limit] = Gen.const(Size(0))
+
   val pathGen: Gen[Stream[NP]] = Gen.listOf(
     Gen.pick(1, List(N, N, P)).flatMap(_.head))
     .flatMap(_.toStream)
