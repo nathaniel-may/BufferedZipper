@@ -4,20 +4,26 @@ package docs
 import org.scalatest._
 import Matchers._
 
+// scala
+import scalaz.Writer
+import scalaz._, Scalaz._
+
 //project
 import zipper.{BufferedZipper, Unlimited, Size}
-import util.PropertyFunctions.{Counter, bumpCounter}
 
 
 class ReadmeSpec extends FlatSpec {
+  type OutSim[A] = Writer[Vector[String], A]
 
   "A BufferedZipper" should "should not repeat effects with an unlimited buffer" in {
-    val ioStream: Stream[Counter[String]] = "the effects only happen once"
+    val wordStream = "the effects only happen once"
       .split(" ")
       .toStream
-      .map(bumpCounter)
 
-    val buffT = BufferedZipper.applyT(ioStream, Unlimited)
+    val writerStream: Stream[OutSim[String]] = wordStream
+      .map { s => Vector(s).tell.map(_ => s) }
+
+    val buffT = BufferedZipper.applyT(writerStream, Unlimited)
 
     (for {
       b  <-  buffT
@@ -31,16 +37,18 @@ class ReadmeSpec extends FlatSpec {
       p3 <-  p2.prevT
       p4 <-  p3.prevT
       p5 <-  p4.prevT
-    } yield p5).run.exec(0) shouldBe 5
+    } yield p5).run.run._1 shouldBe wordStream.toVector
   }
 
   "A BufferedZipper" should "should repeat effects with a buffer size of 0" in {
-    val ioStream: Stream[Counter[String]] = "the effects only happen once"
+    val wordStream = "the effects only happen once"
       .split(" ")
       .toStream
-      .map(bumpCounter)
 
-    val buffT = BufferedZipper.applyT(ioStream, Size(0))
+    val writerStream: Stream[OutSim[String]] = wordStream
+      .map { s => Vector(s).tell.map(_ => s) }
+
+    val buffT = BufferedZipper.applyT(writerStream, Size(0))
 
     (for {
       b  <-  buffT
@@ -54,7 +62,7 @@ class ReadmeSpec extends FlatSpec {
       p3 <-  p2.prevT
       p4 <-  p3.prevT
       p5 <-  p4.prevT
-    } yield p5).run.exec(0) shouldBe 10
+    } yield p5).run.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.toVector)
   }
 
 }
