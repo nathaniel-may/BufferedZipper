@@ -40,7 +40,7 @@ class ReadmeSpec extends FlatSpec {
     } yield p5).run.run._1 shouldBe wordStream.toVector
   }
 
-  "A BufferedZipper" should "should repeat effects with a buffer size of 0" in {
+  ignore should "repeat effects with a buffer size of 0" in {
     val wordStream = "the effects only happen once"
       .split(" ")
       .toStream
