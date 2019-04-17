@@ -24,13 +24,14 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
     }
   }
 
-  def nextT: OptionT[M, BufferedZipper[M, A]] = OptionT(zipper.next match {
-    case None        => point(None: Option[BufferedZipper[M, A]])
+  def nextT: OptionT[M, BufferedZipper[M, A]] = zipper.next match {
+    case None        => OptionT(point(None))
     case Some(zNext) => buffer match {
-      case buff: HasRight[A] => point(Some(BufferedZipper(buff.next, zNext)))
-      case buff: NoRight[A]  => zNext.focus.map(focus => Some(BufferedZipper(buff.next(focus), zNext)))
+      case buff: HasRight[A] => OptionT(point(Some(BufferedZipper(buff.next, zNext))))
+      case buff: NoRight[A]  => OptionT(zNext.focus.map { focus =>
+        Some(BufferedZipper(buff.next(focus), zNext)) } )
     }
-  })
+  }
 
   def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
     buffer match {
@@ -39,23 +40,25 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
     }
   }
 
-  def prevT: OptionT[M, BufferedZipper[M, A]] = OptionT(zipper.next match {
-    case None        => point(None: Option[BufferedZipper[M, A]])
+  def prevT: OptionT[M, BufferedZipper[M, A]] = zipper.previous match {
+    case None        => OptionT(point(None))
     case Some(zPrev) => buffer match {
-      case buff: HasLeft[A] => point(Some(BufferedZipper(buff.prev, zPrev)))
-      case buff: NoLeft[A]  => zPrev.focus.map(focus => Some(BufferedZipper(buff.prev(focus), zPrev)))
+      case buff: HasLeft[A] => OptionT(point(Some(BufferedZipper(buff.prev, zPrev))))
+      case buff: NoLeft[A]  => OptionT(zPrev.focus.map { focus =>
+        Some(BufferedZipper(buff.prev(focus), zPrev)) } )
     }
-  })
+  }
 
   def map[B](f: A => B): BufferedZipper[M, B] =
     new BufferedZipper(buffer.map(f), zipper.map(_.map(f)))
 
   /**
-    * Traverses from the current position all the way to the left, and all the way right.
-    * Prepends left to focus + right which means the left side is traversed twice.
+    * Traverses the entirety of the contents twice in order to reuse what is in the
+    * buffer to minimize effects.
     *
-    * This implementation aims to minimize the total effects from M by reusing what is
-    * in the buffer rather than minimize traversals.
+    * Elements to the right of the focus are traversed once and reversed to be obtained
+    * in the correct order. Elements to the left of the focus are traversed once, then
+    * traversed again to append the focus and all elements to the right.
     */
   def toStream: M[Stream[A]] = {
     def goLeft(bz: BufferedZipper[M, A], l: M[Stream[A]]): M[Stream[A]] =

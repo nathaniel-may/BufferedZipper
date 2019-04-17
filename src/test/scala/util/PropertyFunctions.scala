@@ -1,7 +1,7 @@
 package util
 
 // Scala
-import scalaz.{Monad, State}
+import scalaz.{Monad, State, OptionT}
 import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
 import scala.language.higherKinds
 
@@ -59,14 +59,33 @@ object PropertyFunctions {
     import monadSyntax._
 
     def go(z: BufferedZipper[M, A], steps: Stream[NP]): M[BufferedZipper[M, A]] = steps match {
-      case N #:: ps => z.next.fold(go(z, ps)) { mbz =>
-        mbz.flatMap(zShift => go(zShift, ps)) }
-      case P #:: ps => z.prev.fold(go(z, ps)) { mbz =>
-        mbz.flatMap(zShift => go(zShift, ps)) }
+      case N #:: nps => z.next.fold(go(z, nps)) { mbz =>
+        mbz.flatMap(zShift => go(zShift, nps)) }
+      case P #:: nps => z.prev.fold(go(z, nps)) { mbz =>
+        mbz.flatMap(zShift => go(zShift, nps)) }
       case Stream.Empty => point(z)
     }
 
     go(bz, path)
+  }
+
+  def moveT[M[_] : Monad, A](path: Path, bz: BufferedZipper[M, A]): OptionT[M, BufferedZipper[M, A]] = {
+    val monadSyntax = implicitly[Monad[M]].monadSyntax
+    import monadSyntax._
+
+    def go(z: BufferedZipper[M, A], steps: Stream[NP]): M[Option[BufferedZipper[M, A]]] = steps match {
+      case N #:: nps => z.nextT.run.flatMap {
+        case None    => go(z, nps)
+        case Some(b) => go(b, nps)
+      }
+      case P #:: nps => z.prevT.run.flatMap {
+        case None    => go(z, nps)
+        case Some(b) => go(b, nps)
+      }
+      case Stream.Empty => point(Some(z))
+    }
+
+    OptionT(go(bz, path))
   }
 
   def toWindowBufferOnPath[A](a:A, l: Stream[A], limit: Limit, path: Path): WindowBuffer[A] = {

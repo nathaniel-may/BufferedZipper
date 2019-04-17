@@ -14,8 +14,8 @@ sealed trait WindowBuffer[+A] {
   private[zipper] val lefts:     Vector[A]
 
   // lazy to wait till concrete instance gets created
-  // doesn't include focus so that min size of 0 can still process workloads. sizeBytes doesn't contain it either.
-  private[zipper] lazy val size: Int = lefts.size + rights.size
+  // doesn't include focus so that size limit of 0 can still process workloads. sizeBytes doesn't contain it either.
+  lazy val size: Int = lefts.size + rights.size
 
   def contains[B >: A](b: B): Boolean = lefts.contains(b) || rights.contains(b)
   def toList: List[A] = toVector.toList

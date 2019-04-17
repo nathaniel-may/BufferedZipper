@@ -6,6 +6,7 @@ import org.scalacheck.{Arbitrary, Properties}
 
 // Scala
 import scalaz.Scalaz.Id
+import scalaz._, Scalaz._ //for sequence. can be deleted.
 
 // Project
 import util.PropertyFunctions._
@@ -27,23 +28,50 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
+  property("toStream is the same as the streamInput regardless of starting point and buffer size with monad transformers") = forAll {
+    (inStream: Stream[Int], limits: Limit, path: Path) => BufferedZipper[Id, Int](inStream, limits)
+      .fold[Stream[Int]](Stream()) { moveT[Id, Int](path, _).run.get.toStream } == inStream
+  }
+
   property("toStream uses buffer to minimize effectful calls") =
     forAll(WithEffect[Counter].bZipGen[Int](bufferSizeGen, bumpCounter), pathGen) {
       (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
         val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
-        val effects = start.flatMap(_.toStream).exec(0)
+        val effects = start.flatMap(b => b.toStream).exec(0)
         val shouldBe = start.map { bz =>
           bz.toStream.eval(0).size - bz.buffer.size - 1 }.eval(0)
         effects == shouldBe
     }
 
-  property("toStream doesn't minimize effectful calls witih no buffer") =
+  // TODO handle get better
+  property("toStream uses buffer to minimize effectful calls with monad transformers") =
+    forAll(WithEffect[Counter].bZipGen[Int](bufferSizeGen, bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        val start = cbz.flatMap { bz => moveT(path, bz).run.flatMap(zeroCounter) }
+        val effects = start.flatMap(_.get.toStream).exec(0)
+        val shouldBe = start.map { obz =>
+          obz.get.toStream.eval(0).size - obz.get.buffer.size - 1 }.eval(0)
+        effects == shouldBe
+    }
+
+  property("toStream doesn't minimize effectful calls with no buffer") =
     forAll(WithEffect[Counter].bZipGen[Int](noBuffer, bumpCounter), pathGen) {
       (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
         val start = cbz.flatMap { bz => move(path, bz).flatMap(zeroCounter) }
         val effects = start.flatMap(_.toStream).exec(0)
         val shouldBe = start.map { bz =>
           bz.toStream.eval(0).size - 1 }.eval(0)
+        effects == shouldBe
+    }
+
+  // TODO handle get better
+  property("toStream doesn't minimize effectful calls with no buffer and monad transformers") =
+    forAll(WithEffect[Counter].bZipGen[Int](noBuffer, bumpCounter), pathGen) {
+      (cbz: Counter[BufferedZipper[Counter, Int]], path: Path) =>
+        val start = cbz.flatMap { bz => moveT(path, bz).run.flatMap(zeroCounter) }
+        val effects = start.flatMap(_.get.toStream).exec(0)
+        val shouldBe = start.map { obz =>
+          obz.get.toStream.eval(0).size - 1 }.eval(0)
         effects == shouldBe
     }
 
@@ -59,10 +87,18 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("next then prev should result in the first element regardless of buffer limit") =
     forAll(bZipGenMin[Int](2, bufferSizeGen)) {
-      (zipper: BufferedZipper[Id, Int]) => (for {
-        next   <- zipper.next
+      (b: BufferedZipper[Id, Int]) => (for {
+        next   <- b.next
         prev   <- next.prev
-      } yield prev.focus) == zipper.toStream.headOption
+      } yield prev.focus) == b.toStream.headOption
+    }
+
+  property("nextT then prevT should result in the first element regardless of buffer limit") =
+    forAll(bZipGenMin[Int](2, bufferSizeGen)) {
+      (b: BufferedZipper[Id, Int]) => (for {
+        next   <- b.nextT
+        prev   <- next.prevT
+      } yield prev.focus).run == b.toStream.headOption
     }
 
   property("buffer is being used when there are at least two elements and space for at least one element") =
