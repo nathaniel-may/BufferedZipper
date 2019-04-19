@@ -62,7 +62,7 @@ sealed trait WindowBuffer[+A] {
   }
 
   private[zipper] def moveLeftWithinWindow = {
-    val (newRights, newLimit) = shrink(rights, focus, Some(lefts.head))
+    val (newRights, newLimit) = shrink(rights, focus, lefts.headOption)
     lefts match {
       case newFocus +: IndexedSeq() => LeftEndBuffer(newRights, newFocus, newLimit)
       case newFocus +: as           => MidBuffer(as, newRights, newFocus, newLimit)
@@ -71,7 +71,7 @@ sealed trait WindowBuffer[+A] {
   }
 
   private[zipper] def moveRightWithinWindow = {
-    val (newLefts, newLimit) = shrink(lefts, focus, Some(rights.head))
+    val (newLefts, newLimit) = shrink(lefts, focus, rights.headOption)
     rights match {
       case newFocus +: IndexedSeq() => RightEndBuffer(newLefts, newFocus, newLimit)
       case newFocus +: as           => MidBuffer(newLefts, as, newFocus, newLimit)
