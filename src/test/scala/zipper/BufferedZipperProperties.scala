@@ -158,9 +158,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       (cbz: Counter[BufferedZipper[Counter, String]]) => cbz.exec(0) == 1
     }
 
-  // TODO sometimes passes sometimes fails
   property("with unlimited buffer, effect happens at most once per element") =
-    forAll(WithEffect[Counter].bZipGen[String](byteLimitAtLeast(16), bumpCounter), pathGen) {
+    forAll(WithEffect[Counter].bZipGen[String](noLimitGen, bumpCounter), pathGen) {
       (cbz: Counter[BufferedZipper[Counter, String]], path: Path) =>
         cbz.flatMap(move(path, _)).exec(0) <= cbz.flatMap(_.toStream).eval(0).size
     }
