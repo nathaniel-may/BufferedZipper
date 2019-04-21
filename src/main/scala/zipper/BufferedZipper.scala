@@ -2,27 +2,27 @@ package zipper
 
 // Scala
 import scalaz.{Monad, Zipper, OptionT}
-import scalaz.syntax.monad._
+import scalaz.syntax.monad.{ToFunctorOps, ToBindOps, ToFunctorOpsUnapply}
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
 import scala.language.higherKinds
 
 
-case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zipper: Zipper[M[A]]) {
+case class BufferedZipper[M[_], A] private (buffer: WindowBuffer[A], zipper: Zipper[M[A]])(implicit m: Monad[M]) {
 
   val index: Int = zipper.index
   val focus: A   = buffer.focus
 
   def next: Option[M[BufferedZipper[M, A]]] = zipper.next.map { zNext =>
     buffer match {
-      case buff: HasRight[A] => BufferedZipper(buff.next, zNext).point
+      case buff: HasRight[A] => m.point(BufferedZipper(buff.next, zNext))
       case buff: NoRight[A]  => zNext.focus.map(focus => BufferedZipper(buff.next(focus), zNext))
     }
   }
 
   def nextT: OptionT[M, BufferedZipper[M, A]] = zipper.next match {
-    case None        => OptionT((None: Option[BufferedZipper[M, A]]).point)
+    case None        => OptionT(m.point(None))
     case Some(zNext) => buffer match {
-      case buff: HasRight[A] => OptionT(Option(BufferedZipper(buff.next, zNext)).point)
+      case buff: HasRight[A] => OptionT(m.point(Some(BufferedZipper(buff.next, zNext))))
       case buff: NoRight[A]  => OptionT(zNext.focus.map { focus =>
         Some(BufferedZipper(buff.next(focus), zNext)) } )
     }
@@ -30,15 +30,15 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
 
   def prev: Option[M[BufferedZipper[M, A]]] = zipper.previous.map { zPrev =>
     buffer match {
-      case buff: HasLeft[A] => BufferedZipper(buff.prev, zPrev).point
+      case buff: HasLeft[A] => m.point(BufferedZipper(buff.prev, zPrev))
       case buff: NoLeft[A]  => zPrev.focus.map(focus => BufferedZipper(buff.prev(focus), zPrev))
     }
   }
 
   def prevT: OptionT[M, BufferedZipper[M, A]] = zipper.previous match {
-    case None        => OptionT((None: Option[BufferedZipper[M, A]]).point)
+    case None        => OptionT(m.point(None: Option[BufferedZipper[M, A]]))
     case Some(zPrev) => buffer match {
-      case buff: HasLeft[A] => OptionT(Option(BufferedZipper(buff.prev, zPrev)).point)
+      case buff: HasLeft[A] => OptionT(m.point(Option(BufferedZipper(buff.prev, zPrev))))
       case buff: NoLeft[A]  => OptionT(zPrev.focus.map { focus =>
         Some(BufferedZipper(buff.prev(focus), zPrev)) } )
     }
@@ -63,33 +63,24 @@ case class BufferedZipper[M[_]: Monad, A] private(buffer: WindowBuffer[A], zippe
       bz.next.fold(l.map(_.reverse)) { nmbz => nmbz.flatMap { nbz => goRight(nbz, l.map(nbz.focus #:: _)) } }
 
     for {
-      l <- goLeft(this, Stream[A]().point)
-      r <- goRight(this, Stream[A]().point)
+      l <- goLeft (this, m.point(Stream()))
+      r <- goRight(this, m.point(Stream()))
     } yield l #::: focus #:: r
   }
 }
 
 object BufferedZipper {
-  def apply[M[_]: Monad, A](stream: Stream[M[A]], limit: Limit): Option[M[BufferedZipper[M, A]]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
+  def apply[M[_], A](stream: Stream[M[A]], limit: Limit)(implicit m: Monad[M]): Option[M[BufferedZipper[M, A]]] =
     stream.toZipper
       .map { zip => zip.focus
         .map { t => new BufferedZipper(WindowBuffer(t, limit), zip) } }
-  }
 
-  def applyT[M[_]: Monad, A](stream: Stream[M[A]], limit: Limit): OptionT[M, BufferedZipper[M, A]] = {
-    val monadSyntax = implicitly[Monad[M]].monadSyntax
-    import monadSyntax._
-
+  def applyT[M[_], A](stream: Stream[M[A]], limit: Limit)(implicit m: Monad[M]): OptionT[M, BufferedZipper[M, A]] =
     stream.toZipper match {
-      case None      => OptionT(point(None))
+      case None      => OptionT(m.point(None))
       case Some(zip) => OptionT(zip.focus.map { t =>
         Some(new BufferedZipper(WindowBuffer(t, limit), zip)) } )
     }
-  }
-
 }
 
 object MyTypes {

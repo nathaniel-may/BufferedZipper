@@ -2,7 +2,7 @@ package util
 
 // Scala
 import scalaz.{Monad, State, OptionT}
-import scalaz.syntax.monad._
+import scalaz.syntax.monad.{ToFunctorOps, ToBindOps, ToFunctorOpsUnapply}
 import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
 import scala.language.higherKinds
 
@@ -27,16 +27,13 @@ object PropertyFunctions {
   def measureBufferContents[A](buff: WindowBuffer[A]): Long =
     buff.toList.map(meter.measureDeep).sum - meter.measureDeep(buff.focus)
 
-  def assertOnPath[M[_] : Monad, A](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => Boolean): M[Boolean] = {
-    val syntax = implicitly[Monad[M]].monadSyntax
-    import syntax._
+  def assertOnPath[M[_] : Monad, A](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => Boolean): M[Boolean] =
     resultsOnPath(bz, path, f).map(_.forall(identity))
-  }
 
   def resultsOnPath[M[_] : Monad, A, B](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => B): M[List[B]] =
     resultsAndPathTaken(bz, path, f).map(_._1)
 
-  def resultsAndPathTaken[M[_] : Monad, A, B](zipper: BufferedZipper[M, A], path: Stream[NP], f: BufferedZipper[M, A] => B): M[(List[B], Path)] = {
+  def resultsAndPathTaken[M[_], A, B](zipper: BufferedZipper[M, A], path: Stream[NP], f: BufferedZipper[M, A] => B)(implicit m: Monad[M]): M[(List[B], Path)] = {
     // if the path walks off the zipper it keeps evaluating till it walks back on, but doesn't record the out of range
     def go(z: BufferedZipper[M, A], steps: Stream[NP], l: M[List[B]], stepsTaken: Stream[NP]): M[(List[B], Stream[NP])] = steps match {
       case N #:: ps => z.next.fold(go(z, ps, l, stepsTaken)) { mbz =>
@@ -46,22 +43,22 @@ object PropertyFunctions {
       case Stream.Empty => l.map(x => (x.reverse, stepsTaken.reverse))
     }
 
-    go(zipper, path, List(f(zipper)).point, Stream())
+    go(zipper, path, m.point(List(f(zipper))), Stream())
   }
 
-  def move[M[_] : Monad, A](path: Path, bz: BufferedZipper[M, A]): M[BufferedZipper[M, A]] = {
+  def move[M[_], A](path: Path, bz: BufferedZipper[M, A])(implicit m: Monad[M]): M[BufferedZipper[M, A]] = {
     def go(z: BufferedZipper[M, A], steps: Stream[NP]): M[BufferedZipper[M, A]] = steps match {
       case N #:: nps => z.next.fold(go(z, nps)) { mbz =>
         mbz.flatMap(zShift => go(zShift, nps)) }
       case P #:: nps => z.prev.fold(go(z, nps)) { mbz =>
         mbz.flatMap(zShift => go(zShift, nps)) }
-      case Stream.Empty => z.point
+      case Stream.Empty => m.point(z)
     }
 
     go(bz, path)
   }
 
-  def moveT[M[_] : Monad, A](path: Path, bz: BufferedZipper[M, A]): OptionT[M, BufferedZipper[M, A]] = {
+  def moveT[M[_], A](path: Path, bz: BufferedZipper[M, A])(implicit m: Monad[M]): OptionT[M, BufferedZipper[M, A]] = {
     def go(z: BufferedZipper[M, A], steps: Stream[NP]): M[Option[BufferedZipper[M, A]]] = steps match {
       case N #:: nps => z.nextT.run.flatMap {
         case None    => go(z, nps)
@@ -71,7 +68,7 @@ object PropertyFunctions {
         case None    => go(z, nps)
         case Some(b) => go(b, nps)
       }
-      case Stream.Empty => Option(z).point
+      case Stream.Empty => m.point(Option(z))
     }
 
     OptionT(go(bz, path))
