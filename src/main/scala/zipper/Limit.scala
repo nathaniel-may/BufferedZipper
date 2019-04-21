@@ -8,22 +8,22 @@ sealed trait Limit
 
 object Unlimited extends Limit
 
-final case class Size private (max: Int) extends Limit
-object Size {
-  def apply(max: Int): Size = new Size(if (max < 0) 0 else max)
+final case class SizeLimit private(max: Int) extends Limit
+object SizeLimit {
+  def apply(max: Int): SizeLimit = new SizeLimit(if (max < 0) 0 else max)
 }
 
 // TODO write property tests for these
-final case class Bytes private (max: Long, current: Long) extends Limit {
+final case class ByteLimit private(max: Long, current: Long) extends Limit {
   def exceeded:    Boolean = current > max
   def notExceeded: Boolean = !exceeded
-  def addSizeOf[A](a: A)      = Bytes(max, current + Bytes.measureDeep(a))
-  def subtractSizeOf[A](a: A) = Bytes(max, current - Bytes.measureDeep(a))
+  def addSizeOf[A](a: A)      = ByteLimit(max, current + ByteLimit.measureDeep(a))
+  def subtractSizeOf[A](a: A) = ByteLimit(max, current - ByteLimit.measureDeep(a))
 }
-object Bytes {
-  def apply(max: Long): Bytes = {
+object ByteLimit {
+  def apply(max: Long): ByteLimit = {
     measureDeep(max) // throws if JVM -javaagent flag isn't set to Jamm
-    new Bytes(if (max < 0L) 0L else max, 0L)
+    new ByteLimit(if (max < 0L) 0L else max, 0L)
   }
 
   // meter tooling included here so that it is not included unless needed

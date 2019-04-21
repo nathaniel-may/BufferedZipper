@@ -25,7 +25,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
   property("never exceeds byte limit") =
     forAll(windowBufferGen()(byteLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
-        case Bytes(max, _) => measureBufferContents(buff) <= max
+        case ByteLimit(max, _) => measureBufferContents(buff) <= max
         case _             => false
       }
     }
@@ -33,7 +33,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
   property("byte size estimate is accurate") =
     forAll(windowBufferGen()(byteLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
-        case Bytes(_, est) => measureBufferContents(buff) == est
+        case ByteLimit(_, est) => measureBufferContents(buff) == est
         case _             => false
       }
     }
@@ -41,7 +41,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
   property("never exceeds size limit") =
     forAll(windowBufferGen()(sizeLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
-        case Size(max) => buff.size <= max
+        case SizeLimit(max) => buff.size <= max
         case _         => false
       }
     }

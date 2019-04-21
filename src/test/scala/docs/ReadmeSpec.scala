@@ -9,7 +9,7 @@ import scalaz.Writer
 import scalaz._, Scalaz._
 
 //project
-import zipper.{BufferedZipper, Unlimited, Size}
+import zipper.{BufferedZipper, Unlimited, SizeLimit}
 
 
 class ReadmeSpec extends FlatSpec {
@@ -47,7 +47,7 @@ class ReadmeSpec extends FlatSpec {
     val writerStream: Stream[OutSim[String]] = wordStream
       .map { s => Vector(s).tell.map(_ => s) }
 
-    val buffT = BufferedZipper.applyT(writerStream, Size(0))
+    val buffT = BufferedZipper.applyT(writerStream, SizeLimit(0))
 
     (for {
       b  <- buffT

@@ -11,7 +11,7 @@ import scala.language.higherKinds
 // Project
 import util.Directions.{N, NP, P}
 import util.PropertyFunctions.toWindowBufferOnPath
-import zipper.{WindowBuffer, Limit, Unlimited, Size, Bytes}
+import zipper.{WindowBuffer, Limit, Unlimited, SizeLimit, ByteLimit}
 
 object Generators {
   type Path = Stream[NP]
@@ -19,10 +19,10 @@ object Generators {
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
   val uniqueIntStreamGen: Gen[Stream[Int]] = intStreamGen.map(_.distinct)
 
-  val sizeLimitGen: Gen[Size] = Gen.sized { size => Gen.const(Size(size)) }
-  val byteLimitGen: Gen[Bytes] = Gen.sized { size => Gen.const(Bytes(16L * size)) }
+  val sizeLimitGen: Gen[SizeLimit] = Gen.sized { size => Gen.const(SizeLimit(size)) }
+  val byteLimitGen: Gen[ByteLimit] = Gen.sized { size => Gen.const(ByteLimit(16L * size)) }
   val noLimitGen: Gen[Limit] = Gen.const(Unlimited)
-  val noBuffer: Gen[Size] = Gen.const(Size(0))
+  val noBuffer: Gen[SizeLimit] = Gen.const(SizeLimit(0))
 
   /**
     * 10% Unlimited
@@ -36,15 +36,15 @@ object Generators {
       else             Gen.resize(size, sizeLimitGen) } }
 
   def byteLimitAtLeast(min: Long): Gen[Limit] = sizeLimitGen.map { lim =>
-    if (lim.max < min) Bytes(min) else lim }
+    if (lim.max < min) ByteLimit(min) else lim }
 
   def sizeLimitAtLeast(min: Int): Gen[Limit] = sizeLimitGen.map { lim =>
-    if (lim.max < min) Size(min) else lim }
+    if (lim.max < min) SizeLimit(min) else lim }
 
   def bufferGenNoBiggerThan(max: Long): Gen[Limit] = Gen.sized { size =>
     val realMax = if (max < 0) 0 else max
     val cap = 16L * size
-    Gen.const(Bytes(if (cap > realMax) realMax else cap))
+    Gen.const(ByteLimit(if (cap > realMax) realMax else cap))
   }
 
   val pathGen: Gen[Stream[NP]] = Gen.listOf(

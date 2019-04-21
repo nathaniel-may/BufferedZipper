@@ -19,7 +19,7 @@ sealed trait WindowBuffer[+A] {
   def ls: Vector[A] =  WindowBuffer.leftsRights(this)._1
   def rs: Vector[A] =  WindowBuffer.leftsRights(this)._2
   def contains[B >: A](b: B): Boolean = WindowBuffer.contains[A, B](this)(b)
-  def toList: List[A] = toVector.toList
+  def toList: List[A] = toVector.toList //TODO remove this because it takes an extra traversal
   def toVector: Vector[A] = WindowBuffer.toVector(this)
   def map[B](f: A => B): WindowBuffer[B] = this match {
     case LeftEndBuffer(rs, foc, lim)  => LeftEndBuffer(rs.map(f), f(foc), lim)
@@ -81,27 +81,27 @@ object WindowBuffer {
   }
 
   private[zipper] def adjustLimit[A](limit: Limit, up: A, down: A): Limit = limit match {
-    case lim: Bytes => lim.subtractSizeOf(down).addSizeOf(up)
+    case lim: ByteLimit => lim.subtractSizeOf(down).addSizeOf(up)
     case lim        => lim
   }
 
   private[zipper] def adjustLimitUp[A](limit: Limit, up: A): Limit = limit match {
-    case lim: Bytes => lim.addSizeOf(up)
+    case lim: ByteLimit => lim.addSizeOf(up)
     case lim        => lim
   }
 
   private[zipper] def shrink[A](forward: Vector[A], behind: Vector[A], limit: Limit): (Vector[A], Vector[A], Limit) = limit match {
     case lim @ Unlimited => (forward, behind, lim)
 
-    case lim: Bytes =>
-      def truncate(first: Vector[A], second: Vector[A], limit: Bytes): (Vector[A], Vector[A], Bytes) = first match {
+    case lim: ByteLimit =>
+      def truncate(first: Vector[A], second: Vector[A], limit: ByteLimit): (Vector[A], Vector[A], ByteLimit) = first match {
         case _ if limit.notExceeded => (first, second, limit)
         case as :+ a                => truncate(as, second, limit.subtractSizeOf(a))
         case _                      => truncate(second, Vector(), limit)
       }
       truncate(behind, forward, lim) match { case (behind, forward, limit) => (forward, behind, limit) }
 
-    case lim @ Size(max) =>
+    case lim @ SizeLimit(max) =>
       if (forward.size + behind.size <= max) (forward, behind, lim)
       else (forward, behind.take(max - behind.size), lim)
   }

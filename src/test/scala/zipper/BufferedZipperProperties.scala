@@ -135,11 +135,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         assertOnPath[Id, String](in, path, bz => !bz.buffer.contains(bz.focus))
     }
 
+  // TODO sometimes passes sometimes fails
   property("buffer byte limit is never exceeded") =
     forAll(bZipGen[String](byteLimitAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, String], path: Path) =>
         assertOnPath[Id, String](bz, path, bzz => bzz.buffer.limit match {
-          case Bytes(max, _) => measureBufferContents(bzz.buffer) <= max
+          case ByteLimit(max, _) => measureBufferContents(bzz.buffer) <= max
           case _          => false
         })
     }
@@ -148,22 +149,9 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(bZipGen[String](sizeLimitAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, String], path: Path) =>
         assertOnPath[Id, String](bz, path, bzz => bzz.buffer.limit match {
-          case Size(max) => bzz.buffer.size <= max
+          case SizeLimit(max) => bzz.buffer.size <= max
           case _         => false
         })
-    }
-
-  property ("buffer evicts from the ends of the buffer") =
-    forAll(bZipGen[String](byteLimitAtLeast(16)), pathGen) {
-      (bz: BufferedZipper[Id, String], path: Path) =>
-        val (lrs, realPath) = resultsAndPathTaken[Id, String, (Vector[String], Vector[String])](bz, path, bz2 => (bz2.buffer.ls, bz.buffer.rs))
-        lrs.zip(lrs.drop(1))
-          .zip(realPath)
-          .map { case (((l0, r0), (l1, r1)), np) => np match {
-            case N => isPrefix(l0, l1.drop(1)) && (if (l1.nonEmpty) r1 == r0 else isPrefix(r0, r1))
-            case P => isPrefix(r0, r1.drop(1)) && (if (r1.nonEmpty) l1 == l0 else isPrefix(l0, l1))
-          } }
-          .forall(_ == true)
     }
 
   property("effect only takes place once with a stream of one element regardless of buffer size") =
@@ -171,6 +159,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       (cbz: Counter[BufferedZipper[Counter, String]]) => cbz.exec(0) == 1
     }
 
+  // TODO sometimes passes sometimes fails
   property("with unlimited buffer, effect happens at most once per element") =
     forAll(WithEffect[Counter].bZipGen[String](byteLimitAtLeast(16), bumpCounter), pathGen) {
       (cbz: Counter[BufferedZipper[Counter, String]], path: Path) =>
