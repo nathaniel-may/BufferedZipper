@@ -42,7 +42,7 @@ output:
 
 Make a smaller buffer to see the effects occur more than once
 ```scala 
-val buffT = BufferedZipper.applyT(writerStream, SizeLimit(0))
+val buffT = BufferedZipper.applyT(ioStream, SizeLimit(0))
 ```
 output:
 ```
@@ -62,8 +62,8 @@ Testing is primarily done with `scalacheck`. `sbt test` forks tests to two separ
 
 ## Dependencies
 - `cats-core`:  The user interface requires `cats-core` to specify generic effects
-- `sclaz-core`: Until cats adds a [zipper instance](https://github.com/typelevel/cats/issues/1156), internally scalaz must be used for Zipper representations.
-- `jamm`:       Measuring tool to estimate the size of in memory objects. Requires the `javaagent` JVM flag to be set at runtime.
+- `scalaz-core`: Until cats adds a [zipper instance](https://github.com/typelevel/cats/issues/1156), scalaz must be internally used for Zipper representations.
+- `jamm`:       Measuring tool for estimating the size of in memory objects. Requires the `javaagent` JVM flag to be set at runtime.
 
 ## Future Work:
 - `SLF4J` log message when running without Jamm java agent and a ByteLimit is created
