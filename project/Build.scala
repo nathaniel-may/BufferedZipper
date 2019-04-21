@@ -11,7 +11,6 @@ object Build {
 
   val dependencies = List(
     "org.typelevel"      %% "cats-core"   % "1.5.0",
-    "org.typelevel"      %% "cats-effect" % "1.1.0",
     "org.scalaz"         %% "scalaz-core" % "7.2.26",
     "com.github.jbellis" %  "jamm"        % "0.3.3",
 

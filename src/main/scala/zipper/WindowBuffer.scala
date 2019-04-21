@@ -1,14 +1,12 @@
 package zipper
 
+// scala
 import cats.data.NonEmptyVector
 import cats.implicits._
 
+// project
 import WindowBuffer._
 
-/*
-focus:                A
-storage: [3, 2, 1, 0]   [0, 1]
-*/
 
 sealed trait WindowBuffer[+A] {
   val focus: A
