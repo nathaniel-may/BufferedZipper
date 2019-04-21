@@ -17,6 +17,12 @@ object PropertyFunctions {
   type Counter[A] = State[Int, A]
   val meter = new MemoryMeter
 
+  def isPrefix[A](full: Vector[A], prefix: Vector[A]): Boolean = (full, prefix) match {
+    case (a +: as, b +: bs) => if (a == b) isPrefix(as, bs) else false
+    case (_,       _  +: _) => false
+    case (_,       _)       => true
+  }
+
   def bumpCounter[A](a: A): State[Int, A] =
     State.modify[Int](_ + 1).map(_ => a)
 
@@ -102,8 +108,6 @@ object PropertyFunctions {
 
     go(l, path, WindowBuffer(first, limit))
   }
-
-
 
   def toWindowBuffer[A](l: List[A], limit: Limit): Option[WindowBuffer[A]] = {
     def go(ll: List[A], wb: WindowBuffer[A]): WindowBuffer[A] = ll match {

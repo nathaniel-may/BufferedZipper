@@ -19,10 +19,10 @@ object Generators {
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
   val uniqueIntStreamGen: Gen[Stream[Int]] = intStreamGen.map(_.distinct)
 
-  val sizeLimitGen: Gen[Limit] = Gen.sized { size => Gen.const(Size(size)) }
-  val byteLimitGen: Gen[Limit] = Gen.sized { size => Gen.const(Bytes(16L * size)) }
+  val sizeLimitGen: Gen[Size] = Gen.sized { size => Gen.const(Size(size)) }
+  val byteLimitGen: Gen[Bytes] = Gen.sized { size => Gen.const(Bytes(16L * size)) }
   val noLimitGen: Gen[Limit] = Gen.const(Unlimited)
-  val noBuffer: Gen[Limit] = Gen.const(Size(0))
+  val noBuffer: Gen[Size] = Gen.const(Size(0))
 
   /**
     * 10% Unlimited
@@ -35,13 +35,11 @@ object Generators {
       else if (n < 55) Gen.resize(size, byteLimitGen)
       else             Gen.resize(size, sizeLimitGen) } }
 
-  def bufferGenBytesAtLeast(min: Long): Gen[Limit] = Gen.sized { size =>
-    Gen.const(Bytes(16L * size + min))
-  }
+  def byteLimitAtLeast(min: Long): Gen[Limit] = sizeLimitGen.map { lim =>
+    if (lim.max < min) Bytes(min) else lim }
 
-  def bufferGenSizeAtLeast(min: Int): Gen[Limit] = Gen.sized { size =>
-    Gen.const(Size(size + min))
-  }
+  def sizeLimitAtLeast(min: Int): Gen[Limit] = sizeLimitGen.map { lim =>
+    if (lim.max < min) Size(min) else lim }
 
   def bufferGenNoBiggerThan(max: Long): Gen[Limit] = Gen.sized { size =>
     val realMax = if (max < 0) 0 else max

@@ -45,7 +45,7 @@ object NoJavaAgentProperties extends Properties("With no javaagent set") {
   }
 
   property("a BufferedZipper size limit is never exceeded") =
-    forAll(bZipGen[Int](bufferGenSizeAtLeast(16)), pathGen) {
+    forAll(bZipGen[Int](sizeLimitAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
         assertOnPath[Id, Int](bz, path, bzz => bzz.buffer.limit match {
           case Size(max) => bzz.buffer.size <= max
