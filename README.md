@@ -5,7 +5,7 @@ BufferedZipper is a data type that manages effectful buffering with `cats-effect
 Buffer size can be limited by either the number of elements or by the in-memory size of the elements. In order for the zipper to remain operational with buffer sizes of `0` the focus is _not_ included in measurements of buffers.  
 
 ## Examples
-This examples uses the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for easy composability.
+This example uses the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for easy composability.
 ```scala
 import cats.effect.IO
 import zipper.{BufferedZipper, Unlimited}
