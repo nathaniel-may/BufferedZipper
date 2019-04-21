@@ -88,18 +88,19 @@ object PropertyFunctions {
     OptionT(go(bz, path))
   }
 
-  def toWindowBufferOnPath[A](a:A, l: Stream[A], limit: Limit, path: Path): WindowBuffer[A] = {
+  def toWindowBufferOnPath[A](first: A, l: Stream[A], limit: Limit, path: Path): WindowBuffer[A] = {
     def go(ll: Stream[A], path: Path, buff: WindowBuffer[A]): WindowBuffer[A] = (ll, path) match {
-      case (aa @ a #:: as, pp @ step #:: steps) => (step, buff) match {
+      case (aa @ a #:: as, step #:: steps) =>
+        (step, buff) match {
         case (N, b: NoRight[A])  => go(as, steps, b.next(a))
-        case (N, b: HasRight[A]) => go(aa, pp, b.next)
+        case (N, b: HasRight[A]) => go(aa, steps, b.next)
         case (P, b: NoLeft[A])   => go(as, steps, b.prev(a))
-        case (P, b: HasLeft[A])  => go(aa, pp, b.prev)
+        case (P, b: HasLeft[A])  => go(aa, steps, b.prev)
       }
       case _ => buff
     }
 
-    go(l, path, WindowBuffer(a, limit))
+    go(l, path, WindowBuffer(first, limit))
   }
 
 
