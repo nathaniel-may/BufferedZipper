@@ -80,13 +80,13 @@ object WindowBuffer {
     }
   }
 
-  private[zipper] def bumpLimitUp[A](limit: Limit, a: A): Limit = limit match {
-    case lim: Bytes => lim.addSizeOf(a)
+  private[zipper] def adjustLimit[A](limit: Limit, up: A, down: A): Limit = limit match {
+    case lim: Bytes => lim.subtractSizeOf(down).addSizeOf(up)
     case lim        => lim
   }
 
-  private[zipper] def bumpLimitDown[A](limit: Limit, a: A): Limit = limit match {
-    case lim: Bytes => lim.subtractSizeOf(a)
+  private[zipper] def adjustLimitUp[A](limit: Limit, up: A): Limit = limit match {
+    case lim: Bytes => lim.addSizeOf(up)
     case lim        => lim
   }
 
@@ -96,38 +96,38 @@ object WindowBuffer {
     case lim: Bytes =>
       def truncate(first: Vector[A], second: Vector[A], limit: Bytes): (Vector[A], Vector[A], Bytes) = first match {
         case _ if limit.notExceeded => (first, second, limit)
-        case as :+ a => truncate(as, second, limit.subtractSizeOf(a))
-        case _ => truncate(second, Vector(), limit)
+        case as :+ a                => truncate(as, second, limit.subtractSizeOf(a))
+        case _                      => truncate(second, Vector(), limit)
       }
-      truncate(behind, forward, lim)
+      truncate(behind, forward, lim) match { case (behind, forward, limit) => (forward, behind, limit) }
 
     case lim @ Size(max) =>
       if (forward.size + behind.size <= max) (forward, behind, lim)
       else (forward, behind.take(max - behind.size), lim)
   }
 
-  private[zipper] def shiftWindowLeft[A, B <: A](w: NoLeft[A], b: B): WindowBuffer[A] = {
+  private[zipper] def shiftWindowLeft[A, B <: A](w: NoLeft[A], newFocus: B): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink[A](Vector(), (ww.focus +: ww.rights).toVector, bumpLimitUp(ww.limit, ww.focus))
-      case _ : NoRight[A]  => shrink[A](Vector(), Vector(w.focus), bumpLimitUp(w.limit, w.focus))
+      case ww: HasRight[A] => shrink[A](Vector(), (ww.focus +: ww.rights).toVector, adjustLimitUp(ww.limit, ww.focus))
+      case _ : NoRight[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimitUp(w.limit, w.focus))
     }
 
-    WindowBuffer(newLefts, newRights, b, newLimit)
+    WindowBuffer(newLefts, newRights, newFocus, newLimit)
   }
 
-  private[zipper] def shiftWindowRight[A, B <: A](w: NoRight[A], b: B): WindowBuffer[A] = {
+  private[zipper] def shiftWindowRight[A, B <: A](w: NoRight[A], newFocus: B): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink[A](Vector(), (ww.focus +: ww.lefts).toVector, bumpLimitUp(ww.limit, ww.focus))
-      case _ : NoLeft[A]  => shrink[A](Vector(), Vector(w.focus), bumpLimitUp(w.limit, w.focus))
+      case ww: HasLeft[A] => shrink[A](Vector(), (ww.focus +: ww.lefts).toVector, adjustLimitUp(ww.limit, ww.focus))
+      case _ : NoLeft[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimitUp(w.limit, w.focus))
     }
 
-    WindowBuffer(newLefts, newRights, b, newLimit)
+    WindowBuffer(newLefts, newRights, newFocus, newLimit)
   }
 
   private[zipper] def moveLeftWithinWindow[A](w: HasLeft[A]): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, bumpLimitDown(bumpLimitUp(ww.limit, ww.focus), ww.lefts.head))
-      case _ : NoRight[A]  => shrink(w.lefts.tail, Vector(w.focus), bumpLimitDown(bumpLimitUp(w.limit, w.focus), w.lefts.head))
+      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, adjustLimit(ww.limit, ww.focus, w.lefts.head))
+      case _ : NoRight[A]  => shrink(w.lefts.tail, Vector(w.focus), adjustLimit(w.limit, w.focus, w.lefts.head))
     }
 
     WindowBuffer(newLefts, newRights, w.lefts.head, newLimit)
@@ -135,8 +135,8 @@ object WindowBuffer {
 
   private[zipper] def moveRightWithinWindow[A](w: HasRight[A]): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, bumpLimitDown(bumpLimitUp(ww.limit, ww.focus), ww.rights.head))
-      case _ : NoLeft[A]  => shrink(w.rights.tail, Vector(w.focus), bumpLimitDown(bumpLimitUp(w.limit, w.focus), w.rights.head))
+      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, adjustLimit(ww.limit, ww.focus, w.rights.head))
+      case _ : NoLeft[A]  => shrink(w.rights.tail, Vector(w.focus), adjustLimit(w.limit, w.focus, w.rights.head))
     }
 
     WindowBuffer(newLefts, newRights, w.rights.head, newLimit)

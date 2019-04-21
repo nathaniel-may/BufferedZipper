@@ -24,21 +24,8 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
     (inStream: Stream[Int], limits: Limit, path: Path) =>
-      val bz = BufferedZipper[Id, Int](inStream, limits)
-      val toStream = bz
-      .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream }
-
-      //TODO delete these comments
-//      if (toStream != inStream){
-//        println()
-//        bz.fold(println("EMPTY BZ")) { hey => println(s"buffer:      ${hey.buffer.limit}") }
-//        bz.fold(println("EMPTY BZ")) { hey => println(s"bContents:   ${hey.buffer}") }
-//        println(s"path:        $path")
-//        println(s"toStream:    ${toStream.toList}")
-//        println(s"inStream:    ${inStream.toList}")
-//      }
-
-      toStream == inStream
+      BufferedZipper[Id, Int](inStream, limits)
+        .fold[Stream[Int]](Stream()) { move[Id, Int](path, _).toStream } == inStream
   }
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size with monad transformers") = forAll {
