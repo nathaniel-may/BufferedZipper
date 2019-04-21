@@ -64,7 +64,7 @@ class ReadmeSpec extends FlatSpec {
     } yield b).value.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.tail.toVector)
   }
 
-  it should "compile with the IO Monad" in {
+  it should "compile and run with the IO Monad instead of the Writer monad" in {
     val wordStream = "the effects only happen once"
       .split(" ")
       .toStream
