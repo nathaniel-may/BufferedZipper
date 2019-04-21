@@ -26,17 +26,17 @@ class ReadmeSpec extends FlatSpec {
     val buffT = BufferedZipper.applyT(writerStream, Unlimited)
 
     (for {
-      b  <- buffT
-      n1 <- b.nextT
-      n2 <- n1.nextT
-      n3 <- n2.nextT
-      n4 <- n3.nextT
-      p1 <- n4.prevT
-      p2 <- p1.prevT
-      p3 <- p2.prevT
-      p4 <- p3.prevT
-      p5 <- p4.prevT
-    } yield p5).run.run._1 shouldBe wordStream.toVector
+      b <- buffT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+    } yield b).run.run._1 shouldBe wordStream.toVector
   }
 
   it should "repeat effects with a buffer size of 0" in {
@@ -50,17 +50,17 @@ class ReadmeSpec extends FlatSpec {
     val buffT = BufferedZipper.applyT(writerStream, SizeLimit(0))
 
     (for {
-      b  <- buffT
-      n1 <- b.nextT
-      n2 <- n1.nextT
-      n3 <- n2.nextT
-      n4 <- n3.nextT
-      p1 <- n4.prevT
-      p2 <- p1.prevT
-      p3 <- p2.prevT
-      p4 <- p3.prevT
-      p5 <- p4.prevT
-    } yield p5).run.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.tail.toVector)
+      b <- buffT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+    } yield b).run.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.tail.toVector)
   }
 
 }
