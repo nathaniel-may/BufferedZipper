@@ -9,12 +9,10 @@ import scalaz.Scalaz.Id
 
 // Project
 import util.PropertyFunctions._
-import util.Directions.{N, P}
 import util.Generators._
 
-//TODO add tests for dealing with non-uniform types like strings. What if the first string is larger than the buffer size?
-//     -  TODO what if one entry maxes out the buffer size, and the next in focus is smaller than the minimum?
-//TODO test that the estimated buffersize (for capped buffers) is accurate ...or at least never goes negative.
+
+//TODO add properties for inheritance
 object BufferedZipperProperties extends Properties("BufferedZipper") {
   val noEffect = WithEffect[Id]()
   import noEffect.{bZipGen, bZipGenMax, bZipGenMin, uniqueBZipGen} // allows for these functions to be called without explicit Id effect
