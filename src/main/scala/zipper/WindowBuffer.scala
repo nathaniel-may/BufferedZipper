@@ -80,8 +80,13 @@ object WindowBuffer {
     }
   }
 
-  private[zipper] def adjustLimit[A](w: WindowBuffer[A]): Limit = w.limit match {
-    case lim: Bytes => lim.addSizeOf(w.focus)
+  private[zipper] def bumpLimitUp[A](limit: Limit, a: A): Limit = limit match {
+    case lim: Bytes => lim.addSizeOf(a)
+    case lim        => lim
+  }
+
+  private[zipper] def bumpLimitDown[A](limit: Limit, a: A): Limit = limit match {
+    case lim: Bytes => lim.subtractSizeOf(a)
     case lim        => lim
   }
 
@@ -103,8 +108,8 @@ object WindowBuffer {
 
   private[zipper] def shiftWindowLeft[A, B <: A](w: NoLeft[A], b: B): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink[A](Vector(), (ww.focus +: ww.rights).toVector, adjustLimit(ww))
-      case _ : NoRight[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimit(w))
+      case ww: HasRight[A] => shrink[A](Vector(), (ww.focus +: ww.rights).toVector, bumpLimitUp(ww.limit, ww.focus))
+      case _ : NoRight[A]  => shrink[A](Vector(), Vector(w.focus), bumpLimitUp(w.limit, w.focus))
     }
 
     WindowBuffer(newLefts, newRights, b, newLimit)
@@ -112,8 +117,8 @@ object WindowBuffer {
 
   private[zipper] def shiftWindowRight[A, B <: A](w: NoRight[A], b: B): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink[A](Vector(), (ww.focus +: ww.lefts).toVector, adjustLimit(ww))
-      case _ : NoLeft[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimit(w))
+      case ww: HasLeft[A] => shrink[A](Vector(), (ww.focus +: ww.lefts).toVector, bumpLimitUp(ww.limit, ww.focus))
+      case _ : NoLeft[A]  => shrink[A](Vector(), Vector(w.focus), bumpLimitUp(w.limit, w.focus))
     }
 
     WindowBuffer(newLefts, newRights, b, newLimit)
@@ -121,8 +126,8 @@ object WindowBuffer {
 
   private[zipper] def moveLeftWithinWindow[A](w: HasLeft[A]): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, adjustLimit(ww))
-      case _ : NoRight[A]  => shrink(w.lefts.tail, Vector(w.focus), adjustLimit(w))
+      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, bumpLimitDown(bumpLimitUp(ww.limit, ww.focus), ww.lefts.head))
+      case _ : NoRight[A]  => shrink(w.lefts.tail, Vector(w.focus), bumpLimitDown(bumpLimitUp(w.limit, w.focus), w.lefts.head))
     }
 
     WindowBuffer(newLefts, newRights, w.lefts.head, newLimit)
@@ -130,8 +135,8 @@ object WindowBuffer {
 
   private[zipper] def moveRightWithinWindow[A](w: HasRight[A]): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, adjustLimit(ww))
-      case _ : NoLeft[A]  => shrink(w.rights.tail, Vector(w.focus), adjustLimit(w))
+      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, bumpLimitDown(bumpLimitUp(ww.limit, ww.focus), ww.rights.head))
+      case _ : NoLeft[A]  => shrink(w.rights.tail, Vector(w.focus), bumpLimitDown(bumpLimitUp(w.limit, w.focus), w.rights.head))
     }
 
     WindowBuffer(newLefts, newRights, w.rights.head, newLimit)
