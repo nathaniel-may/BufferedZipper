@@ -35,7 +35,7 @@ object Generators {
       else if (n < 55) Gen.resize(size, byteLimitGen)
       else             Gen.resize(size, sizeLimitGen) } }
 
-  def byteLimitAtLeast(min: Long): Gen[Limit] = sizeLimitGen.map { lim =>
+  def byteLimitAtLeast(min: Long): Gen[Limit] = byteLimitGen.map { lim =>
     if (lim.max < min) ByteLimit(min) else lim }
 
   def sizeLimitAtLeast(min: Int): Gen[Limit] = sizeLimitGen.map { lim =>

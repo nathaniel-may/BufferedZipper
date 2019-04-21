@@ -135,13 +135,12 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
         assertOnPath[Id, String](in, path, bz => !bz.buffer.contains(bz.focus))
     }
 
-  // TODO sometimes passes sometimes fails
   property("buffer byte limit is never exceeded") =
     forAll(bZipGen[String](byteLimitAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, String], path: Path) =>
         assertOnPath[Id, String](bz, path, bzz => bzz.buffer.limit match {
           case ByteLimit(max, _) => measureBufferContents(bzz.buffer) <= max
-          case _          => false
+          case _                 => false
         })
     }
 
@@ -150,7 +149,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
       (bz: BufferedZipper[Id, String], path: Path) =>
         assertOnPath[Id, String](bz, path, bzz => bzz.buffer.limit match {
           case SizeLimit(max) => bzz.buffer.size <= max
-          case _         => false
+          case _              => false
         })
     }
 
