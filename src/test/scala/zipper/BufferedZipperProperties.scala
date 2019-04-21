@@ -6,7 +6,6 @@ import org.scalacheck.{Arbitrary, Properties}
 
 // Scala
 import scalaz.Scalaz.Id
-import scalaz._, Scalaz._ //for sequence. can be deleted.
 
 // Project
 import util.PropertyFunctions._
@@ -156,7 +155,7 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
   property ("buffer evicts the correct elements") =
     forAll(bZipGen[Int](bufferGenBytesAtLeast(16)), pathGen) {
       (bz: BufferedZipper[Id, Int], path: Path) =>
-        val (lrs, realPath) = resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](bz, path, bz2 => (bz2.buffer.lefts, bz.buffer.rights))
+        val (lrs, realPath) = resultsAndPathTaken[Id, Int, (Vector[Int], Vector[Int])](bz, path, bz2 => (bz2.buffer.ls, bz.buffer.rs))
         lrs.zip(lrs.drop(1))
           .zip(realPath)
           .map { case (((l0, r0), (l1, r1)), np) => np match {

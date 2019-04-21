@@ -21,7 +21,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
     (in: List[Int]) => toWindowBuffer(in, Unlimited)
       .fold(in.isEmpty) { _.map(_+1).toList == in.map(_+1) }
   }
-
+  
   property("never exceeds byte limit") =
     forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {

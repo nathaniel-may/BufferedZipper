@@ -16,6 +16,8 @@ sealed trait WindowBuffer[+A] {
 
   def size: Int
 
+  def ls: Vector[A] =  WindowBuffer.leftsRights(this)._1
+  def rs: Vector[A] =  WindowBuffer.leftsRights(this)._2
   def contains[B >: A](b: B): Boolean = WindowBuffer.contains[A, B](this)(b)
   def toList: List[A] = toVector.toList
   def toVector: Vector[A] = WindowBuffer.toVector(this)
@@ -36,7 +38,7 @@ object WindowBuffer {
 
   def apply[A](a: A, limits: Limit): DoubleEndBuffer[A] = DoubleEndBuffer(a, limits)
 
-  private[zipper] def apply[A](lefts: Vector[A], rights: Vector[A], focus: A, limit: Limit): WindowBuffer[A] = (lefts, rights) match {
+  private[zipper] def apply[A, B <: A](lefts: Vector[B], rights: Vector[B], focus: B, limit: Limit): WindowBuffer[A] = (lefts, rights) match {
     case (l +: ls, r +: rs) => MidBuffer(NonEmptyVector(l, ls), NonEmptyVector(r, rs), focus, limit)
     case (_,       r +: rs) => LeftEndBuffer(NonEmptyVector(r, rs), focus, limit)
     case (l +: ls, _)       => RightEndBuffer(NonEmptyVector(l, ls), focus, limit)
@@ -54,8 +56,15 @@ object WindowBuffer {
     case ww: HasLeft[A] with HasRight[A] => ww.lefts.reverse ++: ww.focus +: ww.rights
     case ww: HasLeft[A]                  => ww.lefts.reverse :+ ww.focus
     case ww:                 HasRight[A] => ww.focus +: ww.rights
-    case _                               => NonEmptyVector(w.focus, Vector())
+    case _                               => NonEmptyVector.of(w.focus)
   }).toVector
+
+  def leftsRights[A](w: WindowBuffer[A]): (Vector[A], Vector[A]) = w match {
+    case ww: HasLeft[A] with HasRight[A] => (ww.lefts.toVector, ww.rights.toVector)
+    case ww: HasLeft[A]                  => (ww.lefts.toVector, Vector())
+    case ww:                 HasRight[A] => (Vector(),          ww.rights.toVector)
+    case _                               => (Vector(),          Vector())
+  }
 
   def toString[A](wb: WindowBuffer[A]): String = {
     def left (lefts:  Vector[A]) = if (lefts.isEmpty)  "" else lefts.reverse.mkString("", ", ", " ")
@@ -71,56 +80,61 @@ object WindowBuffer {
     }
   }
 
-  def shrink[A](forward: Vector[A], behind: Vector[A], limit: Limit): (Vector[A], Vector[A], Limit) = limit match {
+  private[zipper] def adjustLimit[A](w: WindowBuffer[A]): Limit = w.limit match {
+    case lim: Bytes => lim.addSizeOf(w.focus)
+    case lim        => lim
+  }
+
+  private[zipper] def shrink[A](forward: Vector[A], behind: Vector[A], limit: Limit): (Vector[A], Vector[A], Limit) = limit match {
     case lim @ Unlimited => (forward, behind, lim)
 
-    case Bytes(max, current) =>
-      def truncate(first: Vector[A], second: Vector[A], bytes: Long, max: Long): (Vector[A], Vector[A], Bytes) = first match {
-        case _       if bytes <= max => (first, second, Bytes(max, bytes))
-        case as :+ a                 => truncate(as,     second,   bytes - Bytes.measureDeep(a), max)
-        case _                       => truncate(second, Vector(), bytes, max)
+    case lim: Bytes =>
+      def truncate(first: Vector[A], second: Vector[A], limit: Bytes): (Vector[A], Vector[A], Bytes) = first match {
+        case _ if limit.notExceeded => (first, second, limit)
+        case as :+ a => truncate(as, second, limit.subtractSizeOf(a))
+        case _ => truncate(second, Vector(), limit)
       }
-      truncate(behind, forward, current, max)
+      truncate(behind, forward, lim)
 
     case lim @ Size(max) =>
       if (forward.size + behind.size <= max) (forward, behind, lim)
       else (forward, behind.take(max - behind.size), lim)
   }
 
-  private[zipper] def shiftWindowLeft[A, B >: A](w: NoLeft[A], b: B): WindowBuffer[B] = {
+  private[zipper] def shiftWindowLeft[A, B <: A](w: NoLeft[A], b: B): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink(Vector(), (ww.focus +: ww.rights).toVector, ww.limit)
-      case _ : NoRight[A]  => (Vector(), Vector(), w.limit)
+      case ww: HasRight[A] => shrink[A](Vector(), (ww.focus +: ww.rights).toVector, adjustLimit(ww))
+      case _ : NoRight[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimit(w))
     }
 
-    WindowBuffer[B](newLefts, newRights, b, newLimit)
+    WindowBuffer(newLefts, newRights, b, newLimit)
   }
 
-  private[zipper] def shiftWindowRight[A, B >: A](w: NoRight[A], b: B): WindowBuffer[B] = {
+  private[zipper] def shiftWindowRight[A, B <: A](w: NoRight[A], b: B): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink(Vector(), (ww.focus +: ww.lefts).toVector, ww.limit)
-      case _ : NoLeft[A]  => (Vector(), Vector(), w.limit)
+      case ww: HasLeft[A] => shrink[A](Vector(), (ww.focus +: ww.lefts).toVector, adjustLimit(ww))
+      case _ : NoLeft[A]  => shrink[A](Vector(), Vector(w.focus), adjustLimit(w))
     }
 
-    WindowBuffer[B](newLefts, newRights, b, newLimit)
+    WindowBuffer(newLefts, newRights, b, newLimit)
   }
 
   private[zipper] def moveLeftWithinWindow[A](w: HasLeft[A]): WindowBuffer[A] = {
     val (newLefts, newRights, newLimit) = w match {
-      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, ww.limit)
-      case ww: NoRight[A]  => (ww.lefts.tail, Vector(), ww.limit)
+      case ww: HasRight[A] => shrink(ww.lefts.tail, (ww.focus +: ww.rights).toVector, adjustLimit(ww))
+      case _ : NoRight[A]  => shrink(w.lefts.tail, Vector(w.focus), adjustLimit(w))
     }
 
-    WindowBuffer[A](newLefts, newRights, w.lefts.head, newLimit)
+    WindowBuffer(newLefts, newRights, w.lefts.head, newLimit)
   }
 
   private[zipper] def moveRightWithinWindow[A](w: HasRight[A]): WindowBuffer[A] = {
     val (newRights, newLefts, newLimit) = w match {
-      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, ww.limit)
-      case ww: NoLeft[A]  => (ww.rights.tail, Vector(), ww.limit)
+      case ww: HasLeft[A] => shrink(ww.rights.tail, (ww.focus +: ww.lefts).toVector, adjustLimit(ww))
+      case _ : NoLeft[A]  => shrink(w.rights.tail, Vector(w.focus), adjustLimit(w))
     }
 
-    WindowBuffer[A](newLefts, newRights, w.rights.head, newLimit)
+    WindowBuffer(newLefts, newRights, w.rights.head, newLimit)
   }
 }
 
@@ -142,7 +156,7 @@ sealed trait HasRight[+A] extends WindowBuffer[A] {
   def next: WindowBuffer[A] = moveRightWithinWindow(this)
 }
 
-private[zipper] final case class MidBuffer[A] private(
+private[zipper] final case class MidBuffer[+A] private(
   lefts:     NonEmptyVector[A],
   rights:    NonEmptyVector[A],
   focus:     A,
@@ -150,21 +164,21 @@ private[zipper] final case class MidBuffer[A] private(
   def size: Int = (lefts.size + rights.size).toInt
 }
 
-private[zipper] final case class LeftEndBuffer[A] private(
+private[zipper] final case class LeftEndBuffer[+A] private(
   rights:    NonEmptyVector[A],
   focus:     A,
   limit:     Limit) extends WindowBuffer[A] with NoLeft[A] with HasRight[A] {
   def size: Int = rights.size.toInt
 }
 
-private[zipper] final case class RightEndBuffer[A] private(
+private[zipper] final case class RightEndBuffer[+A] private(
   lefts:     NonEmptyVector[A],
   focus:     A,
   limit:     Limit) extends WindowBuffer[A] with HasLeft[A] with NoRight[A] {
   def size: Int = lefts.size.toInt
 }
 
-private[zipper] final case class DoubleEndBuffer[A] private(
+private[zipper] final case class DoubleEndBuffer[+A] private(
   focus:     A,
   limit:     Limit) extends WindowBuffer[A] with NoLeft[A] with NoRight[A] {
   def size: Int = 0

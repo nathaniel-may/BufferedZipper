@@ -13,7 +13,13 @@ object Size {
   def apply(max: Int): Size = new Size(if (max < 0) 0 else max)
 }
 
-final case class Bytes private (max: Long, current: Long) extends Limit
+// TODO write property tests for these
+final case class Bytes private (max: Long, current: Long) extends Limit {
+  def exceeded:    Boolean = current > max
+  def notExceeded: Boolean = !exceeded
+  def addSizeOf[A](a: A)      = Bytes(max, current + Bytes.measureDeep(a))
+  def subtractSizeOf[A](a: A) = Bytes(max, current - Bytes.measureDeep(a))
+}
 object Bytes {
   def apply(max: Long): Bytes = {
     measureDeep(max) // throws if JVM -javaagent flag isn't set to Jamm
@@ -31,5 +37,5 @@ object Bytes {
       case     Failure(_: java.lang.NullPointerException)  => Success(0L)
       case     Failure(_: java.lang.IllegalStateException) => Failure(noJamm)
       case m @ Failure(_) => m
-    }).get // TODO better design than throwing here
+    }).get // Can only throw runtime exception because this relies on a runtime flag. Throwing early.
 }
