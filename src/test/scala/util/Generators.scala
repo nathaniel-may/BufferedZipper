@@ -17,13 +17,23 @@ object Generators {
   type Path = Stream[NP]
 
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
+  val uniqueIntStreamGen: Gen[Stream[Int]] = intStreamGen.map(_.distinct)
+
+  val sizeLimitGen: Gen[Limit] = Gen.sized { size => Gen.const(Size(size)) }
+  val byteLimitGen: Gen[Limit] = Gen.sized { size => Gen.const(Bytes(16L * size)) }
+  val noLimitGen: Gen[Limit] = Gen.const(Unlimited)
+  val noBuffer: Gen[Limit] = Gen.const(Size(0))
 
   /**
-    * 10% of the time it will be an unbounded buffer regardless of Generator size
+    * 10% Unlimited
+    * 45% Size(size)
+    * 45% Bytes(16L * size)
     */
-  val bufferSizeGen: Gen[Limit] = Gen.sized { size => Gen.const(Bytes(16L * size)) }
-    .flatMap { bSize => Gen.choose(0, 9).map { n => if (n == 0) Unlimited else bSize } }
-
+  val limitGen: Gen[Limit] = Gen.sized { size =>
+    Gen.choose(0, 99).flatMap { n =>
+      if      (n < 10) noLimitGen
+      else if (n < 55) Gen.resize(size, byteLimitGen)
+      else             Gen.resize(size, sizeLimitGen) } }
 
   def bufferGenBytesAtLeast(min: Long): Gen[Limit] = Gen.sized { size =>
     Gen.const(Bytes(16L * size + min))
@@ -39,32 +49,17 @@ object Generators {
     Gen.const(Bytes(if (cap > realMax) realMax else cap))
   }
 
-  val noBuffer: Gen[Limit] = Gen.const(Size(0))
-
   val pathGen: Gen[Stream[NP]] = Gen.listOf(
     Gen.pick(1, List(N, N, P)).flatMap(_.head))
     .flatMap(_.toStream)
 
-  def windowBufferNoLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] =
-    windowBufferGen(Unlimited)(eva, evsa)
-
-  def windowBufferSizeLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = for {
-    limit <- Arbitrary.arbInt.arbitrary
-    buff  <- windowBufferGen(Size(limit))(eva, evsa)
-  } yield buff
-
-  def windowBufferByteLimitGen[A]()(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = for {
-    limit <- Arbitrary.arbLong.arbitrary
-    buff  <- windowBufferGen(Bytes(limit))(eva, evsa)
-  } yield buff
-
-  def windowBufferGen[A](limit: Limit)(implicit eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = Gen.sized { size =>
+  def windowBufferGen[A]()(implicit limit: Gen[Limit], eva: Gen[A], evsa: Gen[Stream[A]]): Gen[WindowBuffer[A]] = Gen.sized { size =>
     for {
       a    <- eva
       sa   <- Gen.resize(size, evsa)
       path <- Gen.resize(size, pathGen)
-      buff =  toWindowBufferOnPath(a, sa, limit, path)
-    } yield buff
+      lim  <- limit
+    } yield toWindowBufferOnPath(a, sa, lim, path)
   }
 
   final case class WithEffect[M[_] : Monad]() {

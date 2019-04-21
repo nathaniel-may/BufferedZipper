@@ -23,7 +23,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
   }
   
   property("never exceeds byte limit") =
-    forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
+    forAll(windowBufferGen()(byteLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Bytes(max, _) => measureBufferContents(buff) <= max
         case _             => false
@@ -31,7 +31,7 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
     }
 
   property("byte size estimate is accurate") =
-    forAll(windowBufferByteLimitGen()(arbInt.arbitrary, intStreamGen)) {
+    forAll(windowBufferGen()(byteLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Bytes(_, est) => measureBufferContents(buff) == est
         case _             => false
@@ -39,10 +39,22 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
     }
 
   property("never exceeds size limit") =
-    forAll(windowBufferSizeLimitGen()(arbInt.arbitrary, intStreamGen)) {
+    forAll(windowBufferGen()(sizeLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Size(max) => buff.size <= max
         case _         => false
       }
+    }
+
+  property("never has duplicate items with any limit") =
+    forAll(windowBufferGen()(limitGen, arbInt.arbitrary, uniqueIntStreamGen)) {
+      (buff: WindowBuffer[Int]) =>
+        val grouped = buff.toList.groupBy(identity).valuesIterator
+        if (!grouped.forall(_.size == 1)) {
+//          println()
+//          println()
+        }
+
+        grouped.forall(_.size == 1)
     }
 }

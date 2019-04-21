@@ -25,7 +25,7 @@ object NoJavaAgentProperties extends Properties("With no javaagent set") {
   }
 
   property("a window buffer never exceeds size limit") =
-    forAll(windowBufferSizeLimitGen()(arbInt.arbitrary, intStreamGen)) {
+    forAll(windowBufferGen()(sizeLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Size(max) => buff.size <= max
         case _         => false
@@ -33,7 +33,7 @@ object NoJavaAgentProperties extends Properties("With no javaagent set") {
     }
 
   property("a window buffer doesn't crash with no limit") =
-    forAll(windowBufferNoLimitGen()(arbInt.arbitrary, intStreamGen)) {
+    forAll(windowBufferGen()(noLimitGen, arbInt.arbitrary, intStreamGen)) {
       (buff: WindowBuffer[Int]) => buff.limit match {
         case Unlimited => true
         case _         => false
