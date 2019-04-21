@@ -3,11 +3,9 @@ package util
 // ScalaCheck
 import org.scalacheck.Shrink
 
-// Scala
-import scalaz.Scalaz.Id
-
 // Project
 import zipper.BufferedZipper
+import util.PropertyFunctions.Id
 
 
 object Shrinkers {

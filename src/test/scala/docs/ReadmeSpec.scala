@@ -5,8 +5,9 @@ import org.scalatest._
 import Matchers._
 
 // scala
-import scalaz.Writer
-import scalaz._, Scalaz._
+import cats.effect.IO
+import cats.data.Writer
+import cats.implicits._
 
 //project
 import zipper.{BufferedZipper, Unlimited, SizeLimit}
@@ -36,7 +37,7 @@ class ReadmeSpec extends FlatSpec {
       b <- b.prevT
       b <- b.prevT
       b <- b.prevT
-    } yield b).run.run._1 shouldBe wordStream.toVector
+    } yield b).value.run._1 shouldBe wordStream.toVector
   }
 
   it should "repeat effects with a buffer size of 0" in {
@@ -60,7 +61,32 @@ class ReadmeSpec extends FlatSpec {
       b <- b.prevT
       b <- b.prevT
       b <- b.prevT
-    } yield b).run.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.tail.toVector)
+    } yield b).value.run._1 shouldBe (wordStream.toVector ++: wordStream.reverse.tail.toVector)
   }
 
+  it should "compile with the IO Monad" in {
+    val wordStream = "the effects only happen once"
+      .split(" ")
+      .toStream
+
+    val ioStream: Stream[IO[String]] = wordStream
+      .map { s => IO { println(s); s } }
+
+    val buffT = BufferedZipper.applyT(ioStream, Unlimited)
+
+    (for {
+      b <- buffT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+    } yield b).value.unsafeRunSync()
+
+    true
+  }
 }

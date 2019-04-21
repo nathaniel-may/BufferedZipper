@@ -6,30 +6,30 @@ Buffer size can be limited by either the number of elements or by the in-memory 
 
 ## Examples
 ```scala
-import scalaz.effect.IO
-import zipper.BufferedZipper
+import cats.effect.IO
+import zipper.{BufferedZipper, Unlimited}
 
 val wordStream = "the effects only happen once"
-  .split(" ")
-  .toStream
+      .split(" ")
+      .toStream
 
-val ioStream: Stream[IO[String]] = wordStream
-  .map { s => Vector(s).tell.map(_ => s) }
+    val ioStream: Stream[IO[String]] = wordStream
+      .map { s => IO { println(s); s } }
 
-val buffT = BufferedZipper.applyT(writerStream, Unlimited)
+    val buffT = BufferedZipper.applyT(ioStream, Unlimited)
 
-(for {
-  b <- buffT
-  b <- b.nextT
-  b <- b.nextT
-  b <- b.nextT
-  b <- b.nextT
-  b <- b.prevT
-  b <- b.prevT
-  b <- b.prevT
-  b <- b.prevT
-  b <- b.prevT
-} yield b).run.run._1 shouldBe wordStream.toVector
+    (for {
+      b <- buffT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.nextT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+      b <- b.prevT
+    } yield b).value.unsafeRunSync()
 ```
 output:
 ```
@@ -58,9 +58,10 @@ the
 ```
 
 ### Dependencies
-BufferedZipper lists both `cats-core` and `scalaz-core` as dependencies because scalaz does not have a `NonEmptyVector` (the [NonEmptyList](https://github.com/scalaz/scalaz/blob/fabab8f699d56279d6f2cc28d02cc2b768e314d7/core/src/main/scala/scalaz/NonEmptyList.scala) does not suffice) and cats does not have a [zipper](https://github.com/typelevel/cats/issues/1156).
+BufferedZipper only requires cats, but until cats adds a [zipper instance](https://github.com/typelevel/cats/issues/1156), internally scalaz must be used for Zipper representations.
 
 ### Future Work:
 - SLF4J log message when running without Jamm java agent and a ByteLimit is created
 - scalajs compatibility
+- cats / scalaz interop
 - stretch: Buffer ahead within a threaded context

@@ -1,9 +1,15 @@
 package zipper
 
-// Scala
-import scalaz.{Monad, Zipper, OptionT}
-import scalaz.syntax.monad.{ToFunctorOps, ToBindOps, ToFunctorOpsUnapply}
+// scalaz
+import scalaz.Zipper
 import scalaz.syntax.std.stream.ToStreamOpsFromStream
+
+// cats
+import cats.Monad
+import cats.data.OptionT
+import cats.implicits.{toFunctorOps, toFlatMapOps}
+
+// scala
 import scala.language.higherKinds
 
 

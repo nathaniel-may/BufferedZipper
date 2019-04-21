@@ -5,8 +5,9 @@ import org.scalacheck.{Arbitrary, Gen}
 import zipper.BufferedZipper
 
 // Scala
-import scalaz.Monad
-import scalaz.syntax.monad.{ToFunctorOps, ToBindOps, ToFunctorOpsUnapply}
+import cats.Monad
+import cats.data.OptionT
+import cats.implicits.{toFunctorOps, toFlatMapOps}
 import scala.language.higherKinds
 
 // Project

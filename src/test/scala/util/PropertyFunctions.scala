@@ -1,8 +1,9 @@
 package util
 
 // Scala
-import scalaz.{Monad, State, OptionT}
-import scalaz.syntax.monad.{ToFunctorOps, ToBindOps, ToFunctorOpsUnapply}
+import cats.Monad
+import cats.data.{OptionT, State}
+import cats.implicits.{toFunctorOps, toFlatMapOps}
 import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
 import scala.language.higherKinds
 
@@ -15,6 +16,7 @@ import util.Generators.Path
 import zipper.Limit
 
 object PropertyFunctions {
+  type Id[A] = A
   type Counter[A] = State[Int, A]
   val meter = new MemoryMeter
 
@@ -60,11 +62,11 @@ object PropertyFunctions {
 
   def moveT[M[_], A](path: Path, bz: BufferedZipper[M, A])(implicit m: Monad[M]): OptionT[M, BufferedZipper[M, A]] = {
     def go(z: BufferedZipper[M, A], steps: Stream[NP]): M[Option[BufferedZipper[M, A]]] = steps match {
-      case N #:: nps => z.nextT.run.flatMap {
+      case N #:: nps => z.nextT.value.flatMap {
         case None    => go(z, nps)
         case Some(b) => go(b, nps)
       }
-      case P #:: nps => z.prevT.run.flatMap {
+      case P #:: nps => z.prevT.value.flatMap {
         case None    => go(z, nps)
         case Some(b) => go(b, nps)
       }
