@@ -93,10 +93,10 @@ val input = Stream(1,2,3,4,5)
 // Nothing is ever evicted from the buffer
 val noLimit = BufferedZipper[Id, Int](input, Unlimited)
 
-// The buffer will keep up to 10 items and the focus in memory 
+// The buffer will keep up to 10 elements and the focus in memory 
 val tenItems = BufferedZipper[Id, Int](input, SizeLimit(10))
 
-// `ByteLimit` requires the JVM runtime flat `javaagent` to be set to the `jamm` jar. Throws an exception if not enabled.
+// `ByteLimit` requires the JVM runtime flag `javaagent` to be set to the `jamm` jar. Throws an exception if not enabled.
 // the cumulative size of the elements in the buffer, excluding the focus, will never exceed 10k
 val tenKb = BufferedZipper[Id, Int](input, BytesLimit(10240))
 ```
