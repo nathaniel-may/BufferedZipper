@@ -17,7 +17,6 @@ sealed trait WindowBuffer[+A] {
   def ls: Vector[A] =  WindowBuffer.leftsRights(this)._1
   def rs: Vector[A] =  WindowBuffer.leftsRights(this)._2
   def contains[B >: A](b: B): Boolean = WindowBuffer.contains[A, B](this)(b)
-  def toList: List[A] = toVector.toList //TODO remove this because it takes an extra traversal
   def toVector: Vector[A] = WindowBuffer.toVector(this)
   def map[B](f: A => B): WindowBuffer[B] = this match {
     case LeftEndBuffer(rs, foc, lim)  => LeftEndBuffer(rs.map(f), f(foc), lim)

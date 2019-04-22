@@ -114,14 +114,14 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
     forAll(uniqueBZipGen[String](byteLimitAtLeast(16)), pathGen) {
       (in: BufferedZipper[Id, String], path: Path) =>
         assertOnPath[Id, String](in, path, bz =>
-          bz.buffer.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
+          bz.buffer.toVector.toList.groupBy(identity).valuesIterator.forall(_.size == 1))
     }
 
   property("buffer is always a segment of the input") =
       forAll(uniqueBZipGen[String](byteLimitAtLeast(16)), pathGen) {
         (in: BufferedZipper[Id, String], path: Path) =>
           assertOnPath[Id, String](in, path, bz =>
-            in.toStream.containsSlice(bz.buffer.toList))
+            in.toStream.containsSlice(bz.buffer.toVector.toList))
       }
 
   property("buffer never contains the focus") =

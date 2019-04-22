@@ -14,12 +14,12 @@ object WindowBufferProperties extends Properties("WindowBuffer") {
 
   property("List and WindowBuffer.toList are the same with no buffer limit") = forAll {
     (in: List[Int]) => toWindowBuffer(in, Unlimited)
-      .fold(in.isEmpty) { _.toList == in }
+      .fold(in.isEmpty) { _.toVector.toList == in }
   }
 
   property("List map f and WindowBuffer map f are the same with no buffer limit") = forAll {
     (in: List[Int]) => toWindowBuffer(in, Unlimited)
-      .fold(in.isEmpty) { _.map(_+1).toList == in.map(_+1) }
+      .fold(in.isEmpty) { _.map(_+1).toVector.toList == in.map(_+1) }
   }
   
   property("never exceeds byte limit") =

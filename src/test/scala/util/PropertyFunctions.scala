@@ -27,7 +27,7 @@ object PropertyFunctions {
     State.modify[Int](_ => 0).map(_ => a)
 
   def measureBufferContents[A](buff: WindowBuffer[A]): Long =
-    buff.toList.map(meter.measureDeep).sum - meter.measureDeep(buff.focus)
+    buff.toVector.toList.map(meter.measureDeep).sum - meter.measureDeep(buff.focus)
 
   def assertOnPath[M[_] : Monad, A](bz: BufferedZipper[M, A], path: Path, f: BufferedZipper[M, A] => Boolean): M[Boolean] =
     resultsOnPath(bz, path, f).map(_.forall(identity))
