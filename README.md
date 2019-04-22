@@ -14,7 +14,7 @@ resolvers += "jitpack" at "https://jitpack.io"
 libraryDependencies += "com.github.nathaniel-may" % "buffered-zipper" % "1.0.0"
 ```
 
-Before running the `BufferedZipper` with a `ByteLimit` restriction, the JVM being used to run the code must have the `javaagent` flag set to the `jamm` jar file. 
+Before running the `BufferedZipper` with a `ByteLimit` restriction, the JVM being used to run the code must have the `javaagent` flag set to the `jamm` jar file. See the [jamm package](https://github.com/jbellis/jamm) for more information.
 ```
 -javaagent:<path to>/jamm.jar
 ```
