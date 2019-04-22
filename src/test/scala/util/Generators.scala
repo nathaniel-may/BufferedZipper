@@ -6,8 +6,7 @@ import zipper.BufferedZipper
 
 // Scala
 import cats.Monad
-import cats.data.OptionT
-import cats.implicits.{toFunctorOps, toFlatMapOps}
+//import cats.implicits.{toFunctorOps, toFlatMapOps}
 import scala.language.higherKinds
 
 // Project
@@ -25,6 +24,19 @@ object Generators {
   val byteLimitGen: Gen[ByteLimit] = Gen.sized { size => Gen.const(ByteLimit(16L * size)) }
   val noLimitGen: Gen[Limit] = Gen.const(Unlimited)
   val noBuffer: Gen[SizeLimit] = Gen.const(SizeLimit(0))
+
+  class Inheritance
+  class Subtype1 extends Inheritance
+  class Subtype2 extends Subtype1
+  class SubtypeA extends Inheritance
+  class SubtypeB extends SubtypeA
+
+  val inheritanceGen: Gen[Inheritance] = Gen.choose(0, 50).flatMap { n =>
+    if      (n < 10) Gen.const(new Inheritance)
+    else if (n < 20) Gen.const(new Subtype1)
+    else if (n < 30) Gen.const(new Subtype2)
+    else if (n < 40) Gen.const(new SubtypeA)
+    else             Gen.const(new SubtypeB) }
 
   /**
     * 10% Unlimited

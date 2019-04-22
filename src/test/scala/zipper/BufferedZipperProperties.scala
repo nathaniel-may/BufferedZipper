@@ -16,16 +16,21 @@ object BufferedZipperProperties extends Properties("BufferedZipper") {
 
   implicit val aPath: Arbitrary[Path] = Arbitrary(pathGen)
   implicit val aBufferSize: Arbitrary[Limit] = Arbitrary(limitGen)
+  implicit val anInheritance: Arbitrary[Inheritance] = Arbitrary(inheritanceGen)
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size") = forAll {
-    (inStream: Stream[String], limits: Limit, path: Path) =>
-      BufferedZipper[Id, String](inStream, limits)
+    (inStream: Stream[String], limits: Limit, path: Path) => BufferedZipper[Id, String](inStream, limits)
         .fold[Stream[String]](Stream()) { move[Id, String](path, _).toStream } == inStream
   }
 
   property("toStream is the same as the streamInput regardless of starting point and buffer size with monad transformers") = forAll {
+    (inStream: Stream[Inheritance], limits: Limit, path: Path) => BufferedZipper[Id, Inheritance](inStream, limits)
+      .fold[Stream[Inheritance]](Stream()) { moveT[Id, Inheritance](path, _).value.get.toStream } == inStream
+  }
+
+  property("toStream is the same as the streamInput with subtypes regardless of starting point and buffer size") = forAll {
     (inStream: Stream[String], limits: Limit, path: Path) => BufferedZipper[Id, String](inStream, limits)
-      .fold[Stream[String]](Stream()) { moveT[Id, String](path, _).value.get.toStream } == inStream
+        .fold[Stream[String]](Stream()) { move[Id, String](path, _).toStream } == inStream
   }
 
   property("toStream uses buffer to minimize effectful calls") =
