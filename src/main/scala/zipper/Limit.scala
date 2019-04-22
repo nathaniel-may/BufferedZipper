@@ -33,7 +33,6 @@ object ByteLimit {
   def measureDeep[A](a: A): Long =
     (Try(meter.measureDeep(a)) match {
       case m @ Success(_) => m
-      case     Failure(_: java.lang.NullPointerException)  => Success(0L)
       case     Failure(_: java.lang.IllegalStateException) => Failure(noJamm)
       case m @ Failure(_) => m
     }).get // Can only throw runtime exception because this relies on a runtime flag. Throwing early.
