@@ -25,7 +25,7 @@ To use your local `.ivy2` cache
 ```
 
 ## Usage
-This example uses the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for easy composability. Also featured are the more standard `next`, `prev`, and `apply`.
+This example uses the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for composability. Also featured are the more standard `next`, `prev`, and `apply`.
 ```scala
 import cats.effect.IO
 import zipper.{BufferedZipper, Unlimited}
