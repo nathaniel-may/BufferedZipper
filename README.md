@@ -28,8 +28,11 @@ To use your local `.ivy2` cache
 -javaagent:$HOME/.ivy2/cache/com.github.jbellis/jamm/jars/jamm-0.3.3.jar
 ```
 
+## Use Case
+A scrolling image gallery for a website often only allows users to navigate left or right, and displays images fetched over the network. Optimizing the implementation of this involves reducing the number of network calls made. By encoding this behavior into a `BufferedZipper` the number of calls is reduced according to the buffer limit.
+
 ## Usage
-This example uses the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for composability. Also featured are the more standard `next`, `prev`, and `apply`.
+This example shows that the `BufferedZipper` reduces effects by utilizing the buffer.
 ```scala
 import cats.effect.IO
 import zipper.{BufferedZipper, Unlimited}
@@ -81,6 +84,7 @@ output:
 > effects
 > the
 ```
+_This example used the alternative methods `nextT`, `prevT`, and the function `applyT` that return the `cats.data.OptionT` monad transformer for composability. Also featured are the more standard `next`, `prev`, and `apply`._
 
 ### Limiting the Buffer
 `BufferedZipper.apply` and `BufferedZipper.applyT` both take an input of type `Limit`. Here is how to specify each type of limit:
@@ -100,7 +104,6 @@ val tenItems = BufferedZipper[Id, Int](input, SizeLimit(10))
 // the cumulative size of the elements in the buffer, excluding the focus, will never exceed 10k
 val tenKb = BufferedZipper[Id, Int](input, BytesLimit(10240))
 ```
-
 
 ## Testing
 Testing is primarily done with `scalacheck`. `sbt test` forks tests to two separate JVMs: one with `jamm` set as the `javaagent` to run the majority of tests, and one without `javaagent` set to verify that the runtime exception is thrown on creation of a `ByteLimit`, and that operations which do not use a `ByteLimit` can still run. The examples in this readme file are verified with `scalatest` unit tests. 
