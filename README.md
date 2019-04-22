@@ -1,7 +1,7 @@
 # BufferedZipper
 [![CircleCI](https://circleci.com/gh/nathaniel-may/BufferedZipper.svg?style=svg)](https://circleci.com/gh/nathaniel-may/BufferedZipper)
 [![codecov](https://codecov.io/gh/nathaniel-may/BufferedZipper/branch/master/graph/badge.svg)](https://codecov.io/gh/nathaniel-may/BufferedZipper)
-
+[![](https://jitpack.io/v/nathaniel-may/BufferedZipper.svg)](https://jitpack.io/#nathaniel-may/BufferedZipper)
 
 
 `BufferedZipper` is a data type that manages effectful buffering compatible with `cats-core` and `cats-effect`.
