@@ -5,9 +5,7 @@ import org.scalatest.Matchers._
 import org.scalatest._
 
 // scala
-import cats.data.Writer
-import cats.effect.IO
-import cats.implicits._
+import cats.data.NonEmptyVector
 
 
 class WindowBufferSpec extends FlatSpec {
@@ -23,7 +21,7 @@ class WindowBufferSpec extends FlatSpec {
       case ww: NoLeft[Int]  => ww.prev(1)
       case ww: HasLeft[Int] => ww.prev
     }
-    
+
     w3.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
     w3.toString.endsWith("[0 -> 1 <- 2]") shouldBe true
 
@@ -35,5 +33,19 @@ class WindowBufferSpec extends FlatSpec {
 
     w0.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
     w0.toString.endsWith("[-> 0 <-]") shouldBe true
+  }
+
+  it should "return the correct ls and rs" in {
+    DoubleEndBuffer(0, Unlimited).ls shouldBe Vector()
+    DoubleEndBuffer(0, Unlimited).rs shouldBe Vector()
+
+    LeftEndBuffer(NonEmptyVector(1, Vector()), 0, Unlimited).ls shouldBe Vector()
+    LeftEndBuffer(NonEmptyVector(1, Vector()), 0, Unlimited).rs shouldBe Vector(1)
+
+    RightEndBuffer(NonEmptyVector(0, Vector()), 1, Unlimited).ls shouldBe Vector(0)
+    RightEndBuffer(NonEmptyVector(0, Vector()), 1, Unlimited).rs shouldBe Vector()
+
+    MidBuffer(NonEmptyVector(0, Vector()), NonEmptyVector(2, Vector()), 1, Unlimited).ls shouldBe Vector(0)
+    MidBuffer(NonEmptyVector(0, Vector()), NonEmptyVector(2, Vector()), 1, Unlimited).rs shouldBe Vector(2)
   }
 }
