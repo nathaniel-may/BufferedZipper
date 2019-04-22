@@ -16,7 +16,7 @@ import zipper.{BufferedZipper, Unlimited, SizeLimit}
 class ReadmeSpec extends FlatSpec {
   type OutSim[A] = Writer[Vector[String], A]
 
-  "A BufferedZipper" should "should not repeat effects with an unlimited buffer" in {
+  "A REAME example" should "should not repeat effects with an unlimited buffer" in {
     val wordStream = "the effects only happen once"
       .split(" ")
       .toStream
@@ -86,6 +86,16 @@ class ReadmeSpec extends FlatSpec {
       b <- b.prevT
       b <- b.prevT
     } yield b).value.unsafeRunSync()
+
+    true
+  }
+
+  it should "compile with the IO Monad" in {
+
+    class MyInterface private (bzip: BufferedZipper[IO, String]) {
+      def next:     String = bzip.next.fold("")(_.map(_.focus).unsafeRunSync())
+      def previous: String = bzip.prev.fold("")(_.map(_.focus).unsafeRunSync())
+    }
 
     true
   }
