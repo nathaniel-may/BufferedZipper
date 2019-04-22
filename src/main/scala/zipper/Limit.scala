@@ -13,7 +13,6 @@ object SizeLimit {
   def apply(max: Int): SizeLimit = new SizeLimit(if (max < 0) 0 else max)
 }
 
-// TODO write property tests for these
 final case class ByteLimit private(max: Long, current: Long) extends Limit {
   def exceeded:    Boolean = current > max
   def notExceeded: Boolean = !exceeded
