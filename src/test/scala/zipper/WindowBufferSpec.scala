@@ -23,8 +23,17 @@ class WindowBufferSpec extends FlatSpec {
       case ww: NoLeft[Int]  => ww.prev(1)
       case ww: HasLeft[Int] => ww.prev
     }
-
+    
     w3.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
     w3.toString.endsWith("[0 -> 1 <- 2]") shouldBe true
+
+    w2.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
+    w2.toString.endsWith("[0, 1 -> 2 <-]") shouldBe true
+
+    w1.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
+    w1.toString.endsWith("[0 -> 1 <-]") shouldBe true
+
+    w0.toString.startsWith("WindowBuffer: Limit: zipper.") shouldBe true
+    w0.toString.endsWith("[-> 0 <-]") shouldBe true
   }
 }
