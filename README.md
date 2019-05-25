@@ -102,7 +102,7 @@ val tenItems = BufferedZipper[Id, Int](input, SizeLimit(10))
 
 // `ByteLimit` requires the JVM runtime flag `javaagent` to be set to the `jamm` jar. Throws an exception if not enabled.
 // the cumulative size of the elements in the buffer, excluding the focus, will never exceed 10k
-val tenKb = BufferedZipper[Id, Int](input, BytesLimit(10240))
+val tenKb = BufferedZipper[Id, Int](input, ByteLimit(10240))
 ```
 
 ## Testing
