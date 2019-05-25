@@ -88,9 +88,3 @@ object BufferedZipper {
         Some(new BufferedZipper(WindowBuffer(t, limit), zip)) } )
     }
 }
-
-object MyTypes {
-  sealed trait NP
-  object N extends NP { override def toString: String = "N" }
-  object P extends NP { override def toString: String = "P" }
-}
