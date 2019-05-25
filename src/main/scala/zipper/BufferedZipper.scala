@@ -9,9 +9,6 @@ import cats.Monad
 import cats.data.OptionT
 import cats.implicits.{toFunctorOps, toFlatMapOps}
 
-// scala
-import scala.language.higherKinds
-
 
 case class BufferedZipper[M[_], A] private (buffer: WindowBuffer[A], zipper: Zipper[M[A]])(implicit m: Monad[M]) {
 

@@ -2,14 +2,14 @@ package util
 
 // Scalacheck
 import org.scalacheck.{Arbitrary, Gen}
-import zipper.BufferedZipper
+import org.scalacheck.cats.implicits._
 
 // Scala
 import cats.Monad
-//import cats.implicits.{toFunctorOps, toFlatMapOps}
-import scala.language.higherKinds
+import cats.implicits._
 
 // Project
+import zipper.BufferedZipper
 import util.Directions.{N, NP, P}
 import util.PropertyFunctions.toWindowBufferOnPath
 import zipper.{WindowBuffer, Limit, Unlimited, SizeLimit, ByteLimit}
@@ -17,13 +17,15 @@ import zipper.{WindowBuffer, Limit, Unlimited, SizeLimit, ByteLimit}
 object Generators {
   type Path = Stream[NP]
 
+  //implicit lazy val GenApplicative: Applicative[Gen] = implicitly[Applicative[Gen]]
+
   val intStreamGen: Gen[Stream[Int]] = implicitly[Arbitrary[Stream[Int]]].arbitrary
   val uniqueIntStreamGen: Gen[Stream[Int]] = intStreamGen.map(_.distinct)
 
   val sizeLimitGen: Gen[SizeLimit] = Gen.sized { size => Gen.const(SizeLimit(size)) }
   val byteLimitGen: Gen[ByteLimit] = Gen.sized { size => Gen.const(ByteLimit(16L * size)) }
-  val noLimitGen: Gen[Limit] = Gen.const(Unlimited)
-  val noBuffer: Gen[SizeLimit] = Gen.const(SizeLimit(0))
+  val noLimitGen:   Gen[Limit]     = Gen.const(Unlimited)
+  val noBuffer:     Gen[SizeLimit] = Gen.const(SizeLimit(0))
 
   class Inheritance
   class Subtype1 extends Inheritance
@@ -96,19 +98,15 @@ object Generators {
         .map(_.map(init))
         .flatMap { sm => buffGen.map { limits => BufferedZipper[M, A](sm, limits).get } }
 
-    private def uniqueStreamGen[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] = for {
-      s        <- evsa.arbitrary
-      nonEmpty <- eva.arbitrary.map(_ #:: s)
-      unique   =  nonEmpty.distinct
-    } yield unique
+    private def uniqueStreamGen[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] =
+      streamGenMin(minSize).map(_.distinct)
 
     private def streamGenMin[A](minSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] = for {
-      s  <- evsa.arbitrary
-      s2 <- Gen.pick(2, eva.arbitrary, eva.arbitrary).map(x => x.toStream #::: s)
-    } yield s2
+      min      <- Stream.fill(minSize)(eva.arbitrary).sequence
+      stream   <- evsa.arbitrary
+    } yield min #::: stream
 
     private def streamGenMax[A](maxSize: Int)(implicit evsa: Arbitrary[Stream[A]], eva: Arbitrary[A]): Gen[Stream[A]] =
       streamGenMin[A](1).map(_.take(maxSize))
-
   }
 }

@@ -5,7 +5,6 @@ import cats.Monad
 import cats.data.{OptionT, State}
 import cats.implicits.{toFunctorOps, toFlatMapOps}
 import zipper.{BufferedZipper, HasRight, NoRight, HasLeft, NoLeft, WindowBuffer}
-import scala.language.higherKinds
 
 // Java
 import org.github.jamm.MemoryMeter

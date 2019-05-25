@@ -88,7 +88,7 @@ object WindowBuffer {
   }
 
   private[zipper] def shrink[A](forward: Vector[A], behind: Vector[A], limit: Limit): (Vector[A], Vector[A], Limit) = limit match {
-    case lim @ Unlimited => (forward, behind, lim)
+    case Unlimited => (forward, behind, Unlimited)
 
     case lim: ByteLimit =>
       def truncate(first: Vector[A], second: Vector[A], limit: ByteLimit): (Vector[A], Vector[A], ByteLimit) = first match {

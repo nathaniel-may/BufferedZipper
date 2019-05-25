@@ -6,7 +6,6 @@ import org.scalatest._
 
 // scala
 import cats.data.NonEmptyVector
-import scala.util.Try
 
 
 class WindowBufferSpec extends FlatSpec {
